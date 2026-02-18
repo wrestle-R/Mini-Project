@@ -1,0 +1,8 @@
+.agents/
+clerk-flow/
+md
+node_modules/
+.next/
+.env.local  
+.env
+.env.production
