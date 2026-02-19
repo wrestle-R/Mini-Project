@@ -7,6 +7,7 @@ const publicPaths = [
   "/signup",
   "/contractor/login",
   "/contractor/signup",
+  "/sso-callback",
   "/api/auth/sync",
 ];
 

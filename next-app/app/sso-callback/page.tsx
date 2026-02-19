@@ -2,16 +2,26 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@/contexts/UserContext";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SSOCallbackPage() {
   const router = useRouter();
+  const { user } = useUser();
 
   useEffect(() => {
-    // Firebase handles OAuth redirects automatically
-    // Simply redirect to dashboard
-    router.push("/dashboard");
-  }, [router]);
+    // Wait until user data is synced/loaded before redirecting
+    if (user.isLoaded && user.firebaseUid) {
+      if (user.role === "contractor") {
+        router.push("/contractor/dashboard");
+      } else {
+        router.push("/dashboard");
+      }
+    } else if (user.isLoaded && !user.firebaseUid) {
+      // Not authenticated, send to login
+      router.push("/login");
+    }
+  }, [user.isLoaded, user.firebaseUid, user.role, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">

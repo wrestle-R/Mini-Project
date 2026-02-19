@@ -12,10 +12,12 @@ import {
 import { formatError } from "@/hooks/use-error-message";
 import { toast } from "sonner";
 
-export function useSignUpHandlers() {
+export function useSignUpHandlers(role: "worker" | "contractor" = "worker") {
   const router = useRouter();
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const redirectTo = role === "contractor" ? "/contractor/dashboard" : "/dashboard";
 
   async function signUpWithEmail(
     emailAddress: string,
@@ -47,7 +49,7 @@ export function useSignUpHandlers() {
             Authorization: `Bearer ${idToken}`,
           },
           body: JSON.stringify({
-            role: "worker",
+            role,
             firstName,
             lastName,
             phoneNumber,
@@ -58,7 +60,7 @@ export function useSignUpHandlers() {
       }
 
       toast.success("Account created successfully!");
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (err: unknown) {
       const msg = formatError(err);
       setError(msg);
@@ -82,14 +84,14 @@ export function useSignUpHandlers() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ role: "worker" }),
+          body: JSON.stringify({ role }),
         });
       } catch (syncErr) {
         console.error("[SignUp] MongoDB sync error:", syncErr);
       }
 
       toast.success("Account created successfully!");
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (err: unknown) {
       const msg = formatError(err);
       setError(msg);

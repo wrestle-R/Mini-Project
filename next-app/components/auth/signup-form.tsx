@@ -27,7 +27,7 @@ export function SignUpForm({
   const [lastName, setLastName] = React.useState("");
   const [phoneNumber, setPhoneNumber] = React.useState("");
   const { error, isSubmitting, signUpWithEmail, signUpWithGoogle, setError } =
-    useSignUpHandlers();
+    useSignUpHandlers(userType);
 
   const signupSchema = z.object({
     emailAddress: z

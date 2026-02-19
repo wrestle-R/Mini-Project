@@ -20,9 +20,9 @@ export default function ContractorLoginPage() {
     errors,
     setErrors,
     handleSubmit,
-    signInWith,
+    signInWithGoogle,
     forgotPasswordCode,
-  } = useSignInHandlers();
+  } = useSignInHandlers("/contractor/dashboard");
 
   return (
     <motion.div
@@ -47,7 +47,7 @@ export default function ContractorLoginPage() {
             errors={errors}
             setErrors={setErrors}
             handleSubmit={handleSubmit}
-            signInWith={signInWith}
+            signInWithGoogle={signInWithGoogle}
             forgotPasswordCode={forgotPasswordCode}
             signUpUrl="/contractor/signup"
           />

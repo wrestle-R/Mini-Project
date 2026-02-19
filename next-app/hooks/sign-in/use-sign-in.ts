@@ -19,10 +19,12 @@ export interface AuthError {
   meta: Record<string, unknown>;
 }
 
-export function useSignInHandlers() {
+export function useSignInHandlers(redirectTo?: string) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<AuthError[]>();
   const router = useRouter();
+
+  const defaultRedirect = redirectTo || "/dashboard";
 
   const handleSubmit = async (
     e: React.FormEvent,
@@ -35,7 +37,7 @@ export function useSignInHandlers() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast.success("Signed in successfully!");
-      router.push("/dashboard");
+      router.push(defaultRedirect);
     } catch (err: unknown) {
       const msg = formatError(err);
       setErrors([
@@ -52,7 +54,7 @@ export function useSignInHandlers() {
     try {
       await signInWithPopup(auth, googleProvider);
       toast.success("Signed in with Google!");
-      router.push("/dashboard");
+      router.push(defaultRedirect);
     } catch (err: unknown) {
       const msg = formatError(err);
       setErrors([

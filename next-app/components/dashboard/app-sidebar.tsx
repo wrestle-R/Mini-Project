@@ -91,30 +91,7 @@ const contractorNavGroups: NavGroup[] = [
       { title: "Dashboard", href: "/dashboard", icon: FiHome },
     ],
   },
-  {
-    label: "Project Management",
-    items: [
-      {
-        title: "Projects",
-        href: "/projects",
-        icon: FiFolder,
-        subItems: [
-          { title: "All Projects", href: "/projects" },
-          { title: "Create Project", href: "/projects/create" },
-        ],
-      },
-      { title: "Tasks", href: "/tasks", icon: FiCheckSquare },
-      { title: "DPR", href: "/dpr", icon: FiClipboard },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { title: "Attendance", href: "/attendance", icon: FiUsers },
-      { title: "Materials", href: "/materials", icon: FiPackage },
-      { title: "Invoicing", href: "/invoicing", icon: FiFileText },
-    ],
-  },
+
 ];
 
 /* ─────────────────── Component ─────────────────── */
