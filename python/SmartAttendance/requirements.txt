@@ -1,0 +1,12 @@
+opencv-python
+torch
+torchvision
+ultralytics
+facenet-pytorch
+faiss-cpu
+numpy
+fastapi
+uvicorn
+python-multipart
+requests
+mediapipe
