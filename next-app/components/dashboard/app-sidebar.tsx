@@ -41,8 +41,8 @@ import {
   FiChevronRight,
   FiLogOut,
   FiUser,
-  FiTool,
 } from "react-icons/fi";
+import { Building2 } from "lucide-react";
 
 /* ─────────────────── Nav config types ─────────────────── */
 
@@ -72,14 +72,7 @@ const workerNavGroups: NavGroup[] = [
       { title: "Dashboard", href: "/dashboard", icon: FiHome },
     ],
   },
-  {
-    label: "Field Work",
-    items: [
-      { title: "Tasks", href: "/tasks", icon: FiCheckSquare },
-      { title: "DPR", href: "/dpr", icon: FiClipboard },
-      { title: "Attendance", href: "/attendance", icon: FiUsers },
-    ],
-  },
+
 ];
 
 /* ─────────────────── Contractor nav items ───────────── */
@@ -127,9 +120,7 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip="BuildSync">
               <Link href="/dashboard">
-                <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-md">
-                  <FiTool className="h-4 w-4" />
-                </div>
+                <Building2 className="h-10 w-10 text-primary shrink-0" />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">BuildSync</span>
                   <span className="text-xs text-muted-foreground capitalize">
@@ -227,11 +218,9 @@ export function AppSidebar() {
       {/* ── Footer ── */}
       <SidebarFooter>
         {/* Theme toggle */}
-        {state === "expanded" && (
-          <div className="flex items-center justify-center px-3 py-2">
-            <ThemeToggle />
-          </div>
-        )}
+        <div className="px-2 py-1">
+          <ThemeToggle fullWidth />
+        </div>
         <SidebarSeparator />
         <SidebarMenu>
           {/* Profile */}

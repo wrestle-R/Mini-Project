@@ -1,28 +1,30 @@
 import mongoose, { Schema, Document, models, model } from "mongoose";
 
 export interface IContractor extends Document {
-  firebaseUid: string;
   email: string;
+  password: string; // hashed
   firstName: string;
   lastName: string;
   phone: string;
-  companyName: string;
+  photoUrl: string;
+  companyId: mongoose.Types.ObjectId;
   role: string;
+  mustChangePassword: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const ContractorSchema = new Schema<IContractor>(
   {
-    firebaseUid: {
+    email: {
       type: String,
       required: true,
       unique: true,
       index: true,
     },
-    email: {
+    password: {
       type: String,
-      default: "",
+      required: true,
     },
     firstName: {
       type: String,
@@ -36,13 +38,23 @@ const ContractorSchema = new Schema<IContractor>(
       type: String,
       default: "",
     },
-    companyName: {
+    photoUrl: {
       type: String,
       default: "",
+    },
+    companyId: {
+      type: Schema.Types.ObjectId,
+      ref: "Company",
+      required: true,
+      index: true,
     },
     role: {
       type: String,
       default: "contractor",
+    },
+    mustChangePassword: {
+      type: Boolean,
+      default: true,
     },
   },
   {

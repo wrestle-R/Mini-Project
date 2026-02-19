@@ -6,6 +6,7 @@ export interface IWorker extends Document {
   firstName: string;
   lastName: string;
   phone: string;
+  photoUrl: string;
   role: string;
   createdAt: Date;
   updatedAt: Date;
@@ -32,6 +33,10 @@ const WorkerSchema = new Schema<IWorker>(
       default: "",
     },
     phone: {
+      type: String,
+      default: "",
+    },
+    photoUrl: {
       type: String,
       default: "",
     },

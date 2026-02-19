@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUser } from "@/contexts/UserContext";
+import { useWorker } from "@/contexts/WorkerContext";
 
 import {
   Sidebar,
@@ -11,63 +11,23 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { Building2 } from "lucide-react";
 
-import {
-  FiHome,
-  FiCheckSquare,
-  FiClipboard,
-  FiUsers,
-  FiLogOut,
-  FiUser,
-  FiTool,
-} from "react-icons/fi";
-
-/* ─────────────────── Nav config types ─────────────────── */
-
-interface NavItem {
-  title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-/* ─────────────────── Worker nav items ─────────────────── */
-
-const workerNavGroups: NavGroup[] = [
-  {
-    label: "Overview",
-    items: [{ title: "Dashboard", href: "/dashboard", icon: FiHome }],
-  },
-  {
-    label: "Field Work",
-    items: [
-      { title: "Tasks", href: "/tasks", icon: FiCheckSquare },
-      { title: "DPR", href: "/dpr", icon: FiClipboard },
-      { title: "Attendance", href: "/attendance", icon: FiUsers },
-    ],
-  },
-];
+import { FiHome, FiLogOut, FiUser, FiFolder } from "react-icons/fi";
 
 /* ─────────────────── Component ─────────────────── */
 
 export function WorkerSidebar() {
   const pathname = usePathname();
-  const { state } = useSidebar();
-  const { user, clearUser } = useUser();
+  const { user, clearUser } = useWorker();
   const { firstName, lastName, email } = user;
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ") || "My Profile";
@@ -82,9 +42,7 @@ export function WorkerSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip="BuildSync">
               <Link href="/dashboard">
-                <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-md">
-                  <FiTool className="h-4 w-4" />
-                </div>
+                <Building2 className="h-6 w-6 text-primary shrink-0" />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">BuildSync</span>
                   <span className="text-xs text-muted-foreground">Worker</span>
@@ -97,45 +55,51 @@ export function WorkerSidebar() {
 
       {/* ── Content ── */}
       <SidebarContent>
-        {workerNavGroups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground/70 font-semibold">
-              {group.label}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive(item.href)}
-                      tooltip={item.title}
-                      className={cn(
-                        state === "expanded" &&
-                          isActive(item.href) &&
-                          "bg-primary/10 border-l-4 border-primary pl-2 font-medium"
-                      )}
-                    >
-                      <Link href={item.href}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/dashboard")}
+                  tooltip="Dashboard"
+                  className={cn(
+                    isActive("/dashboard") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/dashboard">
+                    <FiHome className="h-4 w-4 shrink-0" />
+                    <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/projects")}
+                  tooltip="Projects"
+                  className={cn(
+                    isActive("/projects") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/projects">
+                    <FiFolder className="h-4 w-4 shrink-0" />
+                    <span>Projects</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       {/* ── Footer ── */}
       <SidebarFooter>
-        {state === "expanded" && (
-          <div className="flex items-center justify-center px-3 py-2">
-            <ThemeToggle />
-          </div>
-        )}
+        <div className="px-2 py-1">
+          <ThemeToggle fullWidth />
+        </div>
         <SidebarSeparator />
         <SidebarMenu>
           {/* Profile */}
@@ -145,34 +109,23 @@ export function WorkerSidebar() {
               isActive={isActive("/profile")}
               tooltip="Profile"
               className={cn(
-                "w-full h-auto py-2.5",
                 isActive("/profile")
-                  ? "bg-primary/10 border-l-4 border-primary"
+                  ? "bg-primary/10 text-primary"
                   : "hover:bg-muted/50"
               )}
             >
-              <Link
-                href="/profile"
-                className="flex items-center gap-3 w-full"
-              >
-                <div
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary",
-                    state === "collapsed" && "h-6 w-6"
-                  )}
-                >
+              <Link href="/profile" className="flex items-center gap-2 w-full">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <FiUser className="h-4 w-4" />
                 </div>
-                {state === "expanded" && (
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-medium truncate">
-                      {displayName}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate">
-                      {email || "View profile"}
-                    </span>
-                  </div>
-                )}
+                <div className="flex flex-col min-w-0 overflow-hidden">
+                  <span className="text-sm font-medium truncate">
+                    {displayName}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {email || "View profile"}
+                  </span>
+                </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -184,12 +137,8 @@ export function WorkerSidebar() {
               onClick={clearUser}
               className="w-full mb-2 cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
             >
-              <FiLogOut
-                className={cn("h-4 w-4", state === "expanded" && "ml-2")}
-              />
-              {state === "expanded" && (
-                <span className="font-medium">Logout</span>
-              )}
+              <FiLogOut className="h-4 w-4 shrink-0" />
+              <span className="font-medium">Logout</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

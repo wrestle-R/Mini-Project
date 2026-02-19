@@ -3,7 +3,9 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { UserProvider } from "@/contexts/UserContext";
+import { WorkerProvider } from "@/contexts/WorkerContext";
+import { ContractorProvider } from "@/contexts/ContractorContext";
+import { CompanyProvider } from "@/contexts/CompanyContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -32,11 +34,15 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <UserProvider>
-            <TooltipProvider>
-              {children}
-            </TooltipProvider>
-          </UserProvider>
+          <WorkerProvider>
+            <ContractorProvider>
+              <CompanyProvider>
+                <TooltipProvider>
+                  {children}
+                </TooltipProvider>
+              </CompanyProvider>
+            </ContractorProvider>
+          </WorkerProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>

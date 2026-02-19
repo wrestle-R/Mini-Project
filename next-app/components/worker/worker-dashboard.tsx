@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useUser } from "@/contexts/UserContext";
+import { useWorker } from "@/contexts/WorkerContext";
 import {
   Card,
   CardContent,
@@ -24,7 +24,7 @@ const stats = [
 ];
 
 export function WorkerDashboard() {
-  const { user } = useUser();
+  const { user } = useWorker();
   const { firstName, lastName, firebaseUid } = user;
 
   if (!firebaseUid) {

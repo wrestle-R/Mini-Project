@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Worker from "@/lib/models/Worker";
-import Contractor from "@/lib/models/Contractor";
 
 // Simple Firebase token verification (decodes the JWT to get uid)
 async function verifyFirebaseToken(authHeader: string | null) {
@@ -10,13 +9,11 @@ async function verifyFirebaseToken(authHeader: string | null) {
   }
   const token = authHeader.split("Bearer ")[1];
   try {
-    // Decode the JWT payload (Firebase ID tokens are JWTs)
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const payload = JSON.parse(
       Buffer.from(parts[1], "base64url").toString("utf-8")
     );
-    // Check expiration
     if (payload.exp && payload.exp * 1000 < Date.now()) return null;
     return {
       uid: payload.user_id || payload.sub,
@@ -28,6 +25,7 @@ async function verifyFirebaseToken(authHeader: string | null) {
   }
 }
 
+// Worker-only Firebase sync
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get("authorization");
@@ -38,16 +36,20 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const role: "worker" | "contractor" = body.role || "worker";
     const firstName = body.firstName || firebaseUser.name?.split(" ")[0] || "";
     const lastName = body.lastName || firebaseUser.name?.split(" ").slice(1).join(" ") || "";
     const phoneNumber = body.phoneNumber || "";
 
     await dbConnect();
 
-    // Check if user already exists in either collection
+    // Upsert worker — always update names/phone so fresh signup data is never lost
     const existingWorker = await Worker.findOne({ firebaseUid: firebaseUser.uid });
     if (existingWorker) {
+      // Update fields if we have new data
+      if (firstName) existingWorker.firstName = firstName;
+      if (lastName) existingWorker.lastName = lastName;
+      if (phoneNumber) existingWorker.phone = phoneNumber;
+      await existingWorker.save();
       return NextResponse.json({
         firebaseUid: existingWorker.firebaseUid,
         mongoId: existingWorker._id.toString(),
@@ -55,53 +57,18 @@ export async function POST(req: Request) {
         lastName: existingWorker.lastName,
         email: existingWorker.email,
         phone: existingWorker.phone,
+        photoUrl: existingWorker.photoUrl || "",
         role: existingWorker.role,
       });
     }
 
-    const existingContractor = await Contractor.findOne({ firebaseUid: firebaseUser.uid });
-    if (existingContractor) {
-      return NextResponse.json({
-        firebaseUid: existingContractor.firebaseUid,
-        mongoId: existingContractor._id.toString(),
-        firstName: existingContractor.firstName,
-        lastName: existingContractor.lastName,
-        email: existingContractor.email,
-        phone: existingContractor.phone,
-        role: existingContractor.role,
-      });
-    }
-
-    // User doesn't exist, create new
-    const userData = {
+    // Create new worker
+    const worker = await Worker.create({
       firebaseUid: firebaseUser.uid,
       email: firebaseUser.email || "",
       firstName,
       lastName,
       phone: phoneNumber,
-    };
-
-    if (role === "contractor") {
-      const contractor = await Contractor.create({
-        ...userData,
-        companyName: "",
-        role: "contractor",
-      });
-      console.log("[API/auth/sync] Created contractor:", contractor._id);
-      return NextResponse.json({
-        firebaseUid: contractor.firebaseUid,
-        mongoId: contractor._id.toString(),
-        firstName: contractor.firstName,
-        lastName: contractor.lastName,
-        email: contractor.email,
-        phone: contractor.phone,
-        role: contractor.role,
-      });
-    }
-
-    // Default: create worker
-    const worker = await Worker.create({
-      ...userData,
       role: "worker",
     });
     console.log("[API/auth/sync] Created worker:", worker._id);
@@ -112,6 +79,7 @@ export async function POST(req: Request) {
       lastName: worker.lastName,
       email: worker.email,
       phone: worker.phone,
+      photoUrl: worker.photoUrl || "",
       role: worker.role,
     });
   } catch (error) {

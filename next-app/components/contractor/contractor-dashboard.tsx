@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useUser } from "@/contexts/UserContext";
+import { useContractor } from "@/contexts/ContractorContext";
 import {
   Card,
   CardContent,
@@ -30,10 +30,12 @@ const stats = [
 ];
 
 export function ContractorDashboard() {
-  const { user } = useUser();
-  const { firstName, lastName, firebaseUid } = user;
+  const { user } = useContractor();
+  const firstName = user.firstName;
+  const lastName = user.lastName;
+  const id = user.id;
 
-  if (!firebaseUid) {
+  if (!id) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-32 w-full rounded-xl" />

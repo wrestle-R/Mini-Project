@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FiTool } from "react-icons/fi";
+import { Building2 } from "lucide-react";
 
 export default function AuthLayout({
   children,
@@ -13,9 +13,7 @@ export default function AuthLayout({
           href="/"
           className="flex items-center gap-2 self-center font-semibold text-foreground"
         >
-          <div className="bg-primary text-primary-foreground flex h-7 w-7 items-center justify-center rounded-md">
-            <FiTool className="h-4 w-4" />
-          </div>
+          <Building2 className="h-6 w-6 text-primary" />
           BuildSync
         </Link>
         {children}

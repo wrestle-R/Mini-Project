@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { FiLogIn, FiUserPlus, FiSun, FiMoon, FiTool } from "react-icons/fi";
+import { FiLogIn, FiUserPlus, FiSun, FiMoon } from "react-icons/fi";
+import { Building2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
@@ -23,9 +24,7 @@ export function Navbar() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-2 text-foreground">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <FiTool className="h-4 w-4" />
-          </span>
+          <Building2 className="h-6 w-6 text-primary" />
           <span className="text-sm font-semibold tracking-wide">BuildSync</span>
         </Link>
 

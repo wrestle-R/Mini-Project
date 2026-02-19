@@ -23,6 +23,7 @@ interface UserState {
   lastName: string | null;
   email: string | null;
   phone: string | null;
+  companyName: string | null;
   role: "worker" | "contractor" | null;
   isLoaded: boolean;
 }
@@ -32,11 +33,13 @@ interface UserContextType {
   firebaseUser: FirebaseUser | null;
   clearUser: () => void;
   syncUser: (role?: "worker" | "contractor") => Promise<void>;
+  updateUser: (updates: Partial<UserState>) => void;
 }
 
 const defaultState: UserState = {
   firebaseUid: null,
   mongoId: null,
+  companyName: null,
   firstName: null,
   lastName: null,
   email: null,
@@ -50,6 +53,7 @@ const UserContext = createContext<UserContextType>({
   firebaseUser: null,
   clearUser: () => {},
   syncUser: async () => {},
+  updateUser: () => {},
 });
 
 const STORAGE_KEY = "buildsync_user";
@@ -116,6 +120,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           lastName: data.lastName,
           email: data.email,
           phone: data.phone || null,
+          companyName: data.companyName || null,
           role: data.role,
           isLoaded: true,
         });
@@ -167,8 +172,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     });
   }, [router]);
 
+  const updateUser = useCallback((updates: Partial<UserState>) => {
+    setUser((prev) => ({ ...prev, ...updates }));
+  }, []);
+
   return (
-    <UserContext.Provider value={{ user, firebaseUser, clearUser, syncUser }}>
+    <UserContext.Provider value={{ user, firebaseUser, clearUser, syncUser, updateUser }}>
       {children}
     </UserContext.Provider>
   );

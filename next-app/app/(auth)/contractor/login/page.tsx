@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSignInHandlers } from "@/hooks/sign-in/use-sign-in";
-import { SignInForm } from "@/components/auth/signin-form";
+import { useContractor } from "@/contexts/ContractorContext";
 import {
   Card,
   CardContent,
@@ -10,19 +9,33 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 
 export default function ContractorLoginPage() {
+  const { login } = useContractor();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const {
-    isSubmitting,
-    errors,
-    setErrors,
-    handleSubmit,
-    signInWithGoogle,
-    forgotPasswordCode,
-  } = useSignInHandlers("/contractor/dashboard");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Please enter email and password");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await login(email, password);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <motion.div
@@ -38,19 +51,32 @@ export default function ContractorLoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <SignInForm
-            email={email}
-            setEmail={setEmail}
-            password={password}
-            setPassword={setPassword}
-            isSubmitting={isSubmitting}
-            errors={errors}
-            setErrors={setErrors}
-            handleSubmit={handleSubmit}
-            signInWithGoogle={signInWithGoogle}
-            forgotPasswordCode={forgotPasswordCode}
-            signUpUrl="/contractor/signup"
-          />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="contractor@email.com"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </motion.div>

@@ -1,22 +1,70 @@
 "use client";
 
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 import { FiSun, FiMoon } from "react-icons/fi";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 
-export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const isDark = theme === "dark";
+interface ThemeToggleProps {
+  fullWidth?: boolean;
+}
+
+export function ThemeToggle({ fullWidth = false }: ThemeToggleProps) {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    if (fullWidth) {
+      return (
+        <Button variant="ghost" className="w-full justify-start gap-2" disabled>
+          <FiSun className="h-4 w-4" />
+          <span>Theme</span>
+        </Button>
+      );
+    }
+    return (
+      <Button variant="ghost" size="icon" aria-label="Toggle theme" disabled>
+        <FiSun className="h-4 w-4" />
+      </Button>
+    );
+  }
+
+  const isDark = resolvedTheme === "dark";
+
+  if (fullWidth) {
+    return (
+      <Button
+        variant="ghost"
+        className="w-full justify-start gap-2"
+        onClick={() => setTheme(isDark ? "light" : "dark")}
+        aria-label="Toggle theme"
+      >
+        {isDark ? (
+          <FiSun className="h-4 w-4" />
+        ) : (
+          <FiMoon className="h-4 w-4" />
+        )}
+        <span>{isDark ? "Light Mode" : "Dark Mode"}</span>
+      </Button>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-2">
-      <FiSun className="h-4 w-4 text-muted-foreground" />
-      <Switch
-        checked={isDark}
-        onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-        aria-label="Toggle dark mode"
-      />
-      <FiMoon className="h-4 w-4 text-muted-foreground" />
-    </div>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label="Toggle theme"
+    >
+      {isDark ? (
+        <FiSun className="h-4 w-4" />
+      ) : (
+        <FiMoon className="h-4 w-4" />
+      )}
+    </Button>
   );
 }

@@ -7,8 +7,15 @@ const publicPaths = [
   "/signup",
   "/contractor/login",
   "/contractor/signup",
+  "/contractor/change-password",
+  "/company/login",
+  "/company/change-password",
+  "/admin",
   "/sso-callback",
   "/api/auth/sync",
+  "/api/auth/company",
+  "/api/auth/contractor",
+  "/api/admin",
 ];
 
 export function middleware(request: NextRequest) {
@@ -31,8 +38,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // For protected routes, we rely on client-side Firebase auth check
-  // The UserContext will redirect unauthenticated users
+  // For protected routes, we rely on client-side auth checks
+  // WorkerContext, ContractorContext, CompanyContext handle redirects
   return NextResponse.next();
 }
 
