@@ -32,7 +32,7 @@ export function ContractorSidebar() {
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ") || "My Profile";
 
-  const isActive = (url: string) => pathname === url;
+  const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/");
 
   return (
     <Sidebar collapsible="icon" variant="sidebar">
