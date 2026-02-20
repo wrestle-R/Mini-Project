@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import numpy as np
 import uvicorn
@@ -32,6 +33,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
 def read_root():
     return {"message": "Smart Attendance API is running."}
@@ -43,16 +51,21 @@ def health_check():
 @app.post("/recognize_frame")
 async def recognize_frame(
     file: UploadFile = File(...),
-    source_id: str = Form("default") # Used to track blinking state for a specific camera
+    source_id: str = Form("default"), # Used to track blinking state for a specific camera
+    check_ppe: str = Form("true") # Receive as string from FormData, convert to bool
 ):
     """
     Accepts an image file (jpeg/png) and returns recognized faces + liveness status.
+    Also checks for Personal Protective Equipment (Hard Hat, Vest) if check_ppe is True.
     Designed for ESP32 or other IOT devices streaming frames.
     """
     if resources is None:
         raise HTTPException(status_code=503, detail="Server resources not initialized.")
 
     try:
+        # Convert check_ppe string to boolean
+        should_check_ppe = check_ppe.lower() == 'true'
+
         # Read image bytes
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
@@ -67,7 +80,7 @@ async def recognize_frame(
         is_alive, liveness_details = check_liveness_frame(frame, source_id)
         
         # 2. Recognize Faces
-        matches, _ = process_frame_core(frame, resources)
+        matches, _ = process_frame_core(frame, resources, check_ppe=should_check_ppe)
         
         return JSONResponse(content={
             "status": "success",

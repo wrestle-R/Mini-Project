@@ -28,6 +28,7 @@ import {
   FiFolder,
   FiUserPlus,
   FiClipboard,
+  FiCamera,
 } from "react-icons/fi";
 
 export function CompanySidebar() {
@@ -42,6 +43,7 @@ export function CompanySidebar() {
     { label: "Projects", href: "/company/projects", icon: FiFolder },
     { label: "Contractors", href: "/company/contractors", icon: FiUserPlus },
     { label: "Assignments", href: "/company/assignments", icon: FiClipboard },
+    { label: "Attendance Cam", href: "/company/attendance-cam", icon: FiCamera },
   ];
 
   return (

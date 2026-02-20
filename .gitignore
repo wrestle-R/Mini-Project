@@ -13,3 +13,5 @@ node_modules/
 *.txt
 *.yaml
 *.ipynb
+*.pt
+*.csv

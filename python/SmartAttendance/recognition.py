@@ -24,7 +24,21 @@ def load_resources(index_file="face_index.faiss", mapping_file="id_mapping.json"
          mapping_file = f"SmartAttendance/{mapping_file}"
             
     # Load Models
-    yolo_model = YOLO("yolov8n.pt") # Detects 'person'
+    # 1. Standard YOLO for Person Detection (Face ID)
+    yolo_person_model = YOLO("yolov8n.pt") 
+    
+    # 2. Fine-tuned YOLO for PPE Detection
+    yolo_ppe_model_path = "yolo_training/valid/weights/best.pt"
+    if not os.path.exists(yolo_ppe_model_path) and os.path.exists(f"python/{yolo_ppe_model_path}"):
+        yolo_ppe_model_path = f"python/{yolo_ppe_model_path}"
+    
+    # Load if exists, else None (PPE check will fail/skip)
+    try:
+        yolo_ppe_model = YOLO(yolo_ppe_model_path)
+    except Exception as e:
+        print(f"Warning: Could not load PPE model from {yolo_ppe_model_path}: {e}")
+        yolo_ppe_model = None
+
     detector = get_face_detector()
     encoder = get_face_encoder()
     
@@ -44,47 +58,114 @@ def load_resources(index_file="face_index.faiss", mapping_file="id_mapping.json"
         index = None
         id_mapping = {}
         
-    return yolo_model, detector, encoder, index, id_mapping
+    return yolo_person_model, yolo_ppe_model, detector, encoder, index, id_mapping
 
-def process_frame_core(frame, resources):
+def process_frame_core(frame, resources, check_ppe=True):
     """
     Core logic to process a frame and return matches.
     
     Args:
         frame: OpenCV BGR image.
         resources: Tuple (yolo_model, detector, encoder, index, id_mapping)
+        check_ppe: Boolean to enable/disable PPE checks.
         
     Returns:
         matches: List of dicts with detection info.
         annotated_frame: Frame with drawn boxes.
     """
-    yolo_model, detector, encoder, index, id_mapping = resources
+    yolo_person_model, yolo_ppe_model, detector, encoder, index, id_mapping = resources
     matches = []
     
     if index is None or not id_mapping:
          return matches, frame
 
-    # YOLO Detection
-    results = yolo_model(frame, classes=[0], verbose=False) # class 0 is person
+    # 1. Standard Person Detection (Class 0 in COCO)
+    # increased confidence to avoid false positives
+    results_person = yolo_person_model(frame, classes=[0], conf=0.5, verbose=False) 
     
-    for result in results:
+    persons = []
+    for result in results_person:
         boxes = result.boxes
         for box in boxes:
-            # YOLO Bounding Box
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             conf = float(box.conf[0])
+            persons.append({'bbox': [x1, y1, x2, y2], 'conf': conf})
+
+    # 2. PPE Detection (Conditional)
+    hard_hats = []
+    vests = []
+    
+    if check_ppe and yolo_ppe_model:
+        # Detect Hard_hat (1) and Vest (5) from Fine-tuned model
+        results_ppe = yolo_ppe_model(frame, classes=[1, 5], conf=0.4, verbose=False)
+        for result in results_ppe:
+            boxes = result.boxes
+            for box in boxes:
+                cls = int(box.cls[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                conf = float(box.conf[0])
+                item = {'bbox': [x1, y1, x2, y2], 'conf': conf}
+                
+                if cls == 1: hard_hats.append(item)
+                elif cls == 5: vests.append(item)
+
+    # Helper function to check overlap/containment
+    def check_overlap(person_box, item_box):
+        px1, py1, px2, py2 = person_box
+        ix1, iy1, ix2, iy2 = item_box
+        
+        # Check if item center is within person box or significant overlap
+        ix_center = (ix1 + ix2) / 2
+        iy_center = (iy1 + iy2) / 2
+        
+        if px1 < ix_center < px2 and py1 < iy_center < py2:
+            return True
+        return False
+
+    for person in persons:
+        px1, py1, px2, py2 = person['bbox']
+        
+        # Check PPE
+        has_hard_hat = False
+        has_vest = False
+        is_compliant = True
+        
+        if check_ppe:
+            for hat in hard_hats:
+                if check_overlap(person['bbox'], hat['bbox']):
+                    has_hard_hat = True
+                    break
             
-            if conf < 0.5: continue
-            
-            # Crop person
-            h, w, c = frame.shape
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w, x2), min(h, y2)
-            
-            person_crop = frame[y1:y2, x1:x2]
-            
-            if person_crop.size == 0: continue
-            
+            for vest in vests:
+                if check_overlap(person['bbox'], vest['bbox']):
+                    has_vest = True
+                    break
+
+            is_compliant = has_hard_hat and has_vest
+        
+        # Crop person for Face ID (Standard YOLO Box)
+        h, w, c = frame.shape
+        cx1, cy1 = max(0, px1), max(0, py1)
+        cx2, cy2 = min(w, px2), min(h, py2)
+        
+        person_crop = frame[cy1:cy2, cx1:cx2]
+        
+        match_data = {
+            "id": None,
+            "name": "Unknown",
+            "score": 0.0,
+            "bbox": [px1, py1, px2, py2],
+        }
+        
+        if check_ppe:
+            match_data["ppe"] = {
+                "hard_hat": has_hard_hat,
+                "vest": has_vest,
+                "compliant": is_compliant
+            }
+
+        # Face Recognition Logic
+        if person_crop.size > 0:
             # Convert BGR to RGB
             person_rgb = cv2.cvtColor(person_crop, cv2.COLOR_BGR2RGB)
             person_pil = Image.fromarray(person_rgb)
@@ -93,15 +174,8 @@ def process_frame_core(frame, resources):
             face_tensor = extract_face_tensor(person_pil, detector)
             
             label = "Unknown"
-            color = (0, 0, 255) # Red for unknown
-            info_text = ""
-            match_data = {
-                "id": None,
-                "name": "Unknown",
-                "score": 0.0,
-                "bbox": [x1, y1, x2, y2]
-            }
-
+            color = (0, 0, 255) # Red for unknown/non-compliant
+            
             if face_tensor is not None:
                 # Generate Embedding
                 emb = get_embedding(face_tensor, encoder)
@@ -119,24 +193,36 @@ def process_frame_core(frame, resources):
                          details = get_employee_details(employee_id)
                          name = details['name']
                          
-                         label = f"{name} ({employee_id})"
-                         color = (0, 255, 0)
-                         info_text = f"Score: {score:.2f}"
-                         
                          match_data["id"] = employee_id
                          match_data["name"] = name
                          match_data["score"] = score
+                         
+                         if is_compliant:
+                             label = f"{name} ({employee_id})"
+                             color = (0, 255, 0) # Green for compliant known user
+                         else:
+                             label = f"{name} (MISSING PPE)"
+                             color = (0, 0, 255) # Red for non-compliant
                     else:
-                         info_text = f"Score: {score:.2f}"
                          match_data["score"] = score
+            
+        matches.append(match_data)
 
-            matches.append(match_data)
-
-            # Draw Box and Label
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-            if info_text:
-                cv2.putText(frame, info_text, (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        # Draw Box and Label
+        # If not compliant, color always red
+        draw_color = (0, 255, 0) if is_compliant and match_data["id"] else (0, 0, 255)
+        
+        cv2.rectangle(frame, (px1, py1), (px2, py2), draw_color, 2)
+        
+        # Label Construction
+        display_label = match_data["name"]
+        if not is_compliant and check_ppe:
+            missing = []
+            if not has_hard_hat: missing.append("Hat")
+            if not has_vest: missing.append("Vest")
+            display_label += f" No: {','.join(missing)}"
+            
+        cv2.putText(frame, display_label, (px1, py1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, draw_color, 2)
 
     return matches, frame
 
