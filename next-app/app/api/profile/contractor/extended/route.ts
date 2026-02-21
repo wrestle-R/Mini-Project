@@ -37,8 +37,7 @@ export async function PUT(req: Request) {
 
     const allowed = [
       "bio", "industry", "companySize", "yearEstablished", "licenseNumber",
-      "taxId", "serviceAreas", "projectTypes", "preferredProjectSize",
-      "minProjectValue", "maxProjectValue", "socialLinks", "languages",
+      "taxId", "socialLinks", "languages",
     ] as const;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

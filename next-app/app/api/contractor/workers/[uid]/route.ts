@@ -71,7 +71,6 @@ export async function GET(
             availability: profile.availability,
             location: profile.location,
             languages: profile.languages,
-            certifications: profile.certifications ?? [],
             preferredWorkTypes: profile.preferredWorkTypes,
             toolsOwned: profile.toolsOwned,
             hasVehicle: profile.hasVehicle,

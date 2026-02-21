@@ -10,6 +10,9 @@ export interface ICompanyProfile extends Document {
     state: string;
     zipCode: string;
     country: string;
+    lat: number | null;
+    lng: number | null;
+    displayName: string;
   };
   website: string;
   gstNumber: string;
@@ -23,8 +26,6 @@ export interface ICompanyProfile extends Document {
     twitter: string;
   };
   languages: string[];
-  serviceAreas: string[];
-  specializations: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +54,9 @@ const CompanyProfileSchema = new Schema<ICompanyProfile>(
       state: { type: String, default: "" },
       zipCode: { type: String, default: "" },
       country: { type: String, default: "" },
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      displayName: { type: String, default: "" },
     },
     website: {
       type: String,
@@ -84,14 +88,6 @@ const CompanyProfileSchema = new Schema<ICompanyProfile>(
     languages: {
       type: [String],
       default: ["English"],
-    },
-    serviceAreas: {
-      type: [String],
-      default: [],
-    },
-    specializations: {
-      type: [String],
-      default: [],
     },
   },
   {

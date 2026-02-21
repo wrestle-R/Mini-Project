@@ -11,12 +11,6 @@ export interface IEmergencyContact {
   relationship: string;
 }
 
-export interface ICertification {
-  name: string;
-  issuingBody: string;
-  year: number;
-}
-
 export interface IWorkerProfile extends Document {
   firebaseUid: string;
   bio: string;
@@ -31,9 +25,12 @@ export interface IWorkerProfile extends Document {
     state: string;
     country: string;
     zipCode: string;
+    lat: number | null;
+    lng: number | null;
+    displayName: string;
+    street: string;
   };
   languages: string[];
-  certifications: ICertification[];
   emergencyContact: IEmergencyContact;
   preferredWorkTypes: string[];
   toolsOwned: string[];
@@ -97,6 +94,10 @@ const WorkerProfileSchema = new Schema<IWorkerProfile>(
       state: { type: String, default: "" },
       country: { type: String, default: "" },
       zipCode: { type: String, default: "" },
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      displayName: { type: String, default: "" },
+      street: { type: String, default: "" },
     },
     languages: {
       type: [String],

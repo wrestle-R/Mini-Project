@@ -43,7 +43,7 @@ export async function PUT(req: Request) {
     // Whitelist updatable fields
     const allowed = [
       "bio", "skills", "tradeSpecialties", "experienceYears", "hourlyRate",
-      "availability", "location", "languages", "certifications",
+      "availability", "location", "languages",
       "preferredWorkTypes", "toolsOwned", "hasVehicle", "willingToRelocate",
       "emergencyContact",
     ] as const;

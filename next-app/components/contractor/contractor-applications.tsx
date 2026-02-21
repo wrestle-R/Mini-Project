@@ -468,7 +468,7 @@ function ProjectApplicationsRow({
                       </p>
                       {app.message && (
                         <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-2">
-                          "{app.message}"
+                          &quot;{app.message}&quot;
                         </p>
                       )}
                       <div className="flex items-center gap-2 mt-2">
