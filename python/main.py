@@ -189,11 +189,13 @@ async def upload_ifc(file: UploadFile = File(...)):
         output_filename = f"building_{unique_id}.glb"
         output_path = os.path.join("models", output_filename)
 
-        convert_ifc_to_glb(upload_path, output_path)
+        metadata_path = convert_ifc_to_glb(upload_path, output_path)
+        metadata_filename = os.path.basename(metadata_path)
 
         return JSONResponse(content={
             "status": "success",
-            "model_url": f"/models/{output_filename}"
+            "model_url": f"/models/{output_filename}",
+            "metadata_url": f"/models/{metadata_filename}",
         })
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

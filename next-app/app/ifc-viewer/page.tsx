@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import dynamic from "next/dynamic";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Card,
   CardContent,
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { ElementMetadata } from "@/components/ModelViewer";
 
 const ModelViewer = dynamic(() => import("@/components/ModelViewer"), {
   ssr: false,
@@ -27,9 +28,12 @@ type UploadStatus = "idle" | "uploading" | "success" | "error";
 
 export default function IFCViewerPage() {
   const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const [metadataUrl, setMetadataUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
+  const [selectedElement, setSelectedElement] =
+    useState<ElementMetadata | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = () => {
@@ -44,6 +48,8 @@ export default function IFCViewerPage() {
     setStatus("uploading");
     setErrorMsg("");
     setModelUrl(null);
+    setMetadataUrl(null);
+    setSelectedElement(null);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -61,6 +67,7 @@ export default function IFCViewerPage() {
 
       const data = await res.json();
       setModelUrl(data.model_url);
+      setMetadataUrl(data.metadata_url ?? null);
       setStatus("success");
     } catch (err: unknown) {
       setStatus("error");
@@ -81,8 +88,8 @@ export default function IFCViewerPage() {
             <CardHeader>
               <CardTitle className="text-2xl">IFC Blueprint Viewer</CardTitle>
               <CardDescription>
-                Upload an IFC file to convert it into an interactive 3D model
-                you can explore right in the browser.
+                Upload an IFC file to convert it into an interactive 3D model.
+                Click on any element to inspect its properties and metadata.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -97,7 +104,6 @@ export default function IFCViewerPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col sm:flex-row items-center gap-4">
-                {/* Hidden native input */}
                 <input
                   ref={fileRef}
                   type="file"
@@ -107,7 +113,6 @@ export default function IFCViewerPage() {
                   onChange={handleFileChange}
                 />
 
-                {/* Custom styled file picker */}
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
@@ -133,7 +138,6 @@ export default function IFCViewerPage() {
                   </span>
                 </button>
 
-                {/* Upload button */}
                 <button
                   id="upload-btn"
                   onClick={handleUpload}
@@ -168,7 +172,6 @@ export default function IFCViewerPage() {
                 </button>
               </div>
 
-              {/* Status messages */}
               {status === "uploading" && (
                 <p className="mt-4 text-sm text-muted-foreground animate-pulse">
                   Uploading and converting — this may take a moment for large
@@ -180,8 +183,9 @@ export default function IFCViewerPage() {
               )}
               {status === "success" && (
                 <p className="mt-4 text-sm text-green-500">
-                  ✓ Model converted successfully. Use your mouse to rotate,
-                  scroll to zoom, and right-click to pan.
+                  Model converted successfully. Rotate with left mouse, zoom
+                  with scroll, pan with right mouse. Click any element to
+                  inspect it.
                 </p>
               )}
             </CardContent>
@@ -197,8 +201,121 @@ export default function IFCViewerPage() {
           <Card className="overflow-hidden">
             <CardContent className="p-0">
               {modelUrl ? (
-                <div className="h-[65vh] min-h-[500px]">
-                  <ModelViewer modelUrl={modelUrl} />
+                <div className="relative h-[65vh] min-h-[500px]">
+                  <ModelViewer
+                    modelUrl={modelUrl}
+                    metadataUrl={metadataUrl ?? undefined}
+                    onElementSelect={setSelectedElement}
+                  />
+
+                  {/* Element info panel overlay */}
+                  <AnimatePresence>
+                    {selectedElement && (
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute top-3 right-3 w-80 max-h-[calc(100%-1.5rem)] bg-card/95 backdrop-blur-sm border border-border rounded-lg shadow-2xl flex flex-col z-10"
+                      >
+                        {/* Panel header */}
+                        <div className="flex items-start justify-between gap-2 p-4 border-b border-border">
+                          <div className="min-w-0">
+                            <span className="inline-block rounded-md bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary mb-1">
+                              {selectedElement.type}
+                            </span>
+                            <h3 className="font-semibold text-sm truncate">
+                              {selectedElement.name || "Unnamed Element"}
+                            </h3>
+                            {selectedElement.objectType && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                Type: {selectedElement.objectType}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setSelectedElement(null)}
+                            className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <line x1="18" x2="6" y1="6" y2="18" />
+                              <line x1="6" x2="18" y1="6" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+
+                        {/* Panel body — scrollable */}
+                        <div className="overflow-y-auto p-4 space-y-4 text-sm">
+                          {/* Global ID */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">
+                              Global ID
+                            </p>
+                            <p className="font-mono text-xs break-all">
+                              {selectedElement.globalId}
+                            </p>
+                          </div>
+
+                          {/* Description */}
+                          {selectedElement.description && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground mb-1">
+                                Description
+                              </p>
+                              <p className="text-xs">
+                                {selectedElement.description}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Property Sets */}
+                          {Object.entries(selectedElement.properties).length >
+                          0 ? (
+                            Object.entries(selectedElement.properties).map(
+                              ([psetName, props]) => (
+                                <div key={psetName}>
+                                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                                    {psetName}
+                                  </p>
+                                  <div className="space-y-1">
+                                    {Object.entries(
+                                      props as Record<string, unknown>
+                                    ).map(([key, value]) => (
+                                      <div
+                                        key={key}
+                                        className="flex justify-between gap-3 py-1 border-b border-border/40 last:border-0"
+                                      >
+                                        <span className="text-muted-foreground text-xs shrink-0">
+                                          {key}
+                                        </span>
+                                        <span className="text-xs text-right break-all">
+                                          {formatPropertyValue(value)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            )
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">
+                              No property sets available for this element.
+                            </p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground gap-3">
@@ -234,4 +351,15 @@ export default function IFCViewerPage() {
       </div>
     </div>
   );
+}
+
+function formatPropertyValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") {
+    // Round long decimals for display
+    return Number.isInteger(value) ? String(value) : value.toFixed(4);
+  }
+  if (Array.isArray(value)) return value.map(formatPropertyValue).join(", ");
+  return String(value);
 }

@@ -5,12 +5,41 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
-interface ModelViewerProps {
-  modelUrl: string;
+export interface ElementMetadata {
+  globalId: string;
+  type: string;
+  name: string;
+  description: string;
+  objectType?: string;
+  properties: Record<string, Record<string, unknown>>;
 }
 
-export default function ModelViewer({ modelUrl }: ModelViewerProps) {
+interface ModelViewerProps {
+  modelUrl: string;
+  metadataUrl?: string;
+  onElementSelect?: (element: ElementMetadata | null) => void;
+}
+
+export default function ModelViewer({
+  modelUrl,
+  metadataUrl,
+  onElementSelect,
+}: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const metadataRef = useRef<Record<string, ElementMetadata>>({});
+  const onElementSelectRef = useRef(onElementSelect);
+  onElementSelectRef.current = onElementSelect;
+
+  // Fetch metadata when URL changes
+  useEffect(() => {
+    if (!metadataUrl) return;
+    fetch(`http://localhost:8000${metadataUrl}`)
+      .then((res) => res.json())
+      .then((data) => {
+        metadataRef.current = data;
+      })
+      .catch((err) => console.error("Failed to load metadata:", err));
+  }, [metadataUrl]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -19,8 +48,6 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
     // --- Scene ---
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111113);
-
-    // Subtle fog for depth
     scene.fog = new THREE.FogExp2(0x111113, 0.003);
 
     // --- Camera ---
@@ -87,7 +114,86 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
     controls.dampingFactor = 0.06;
     controls.minDistance = 2;
     controls.maxDistance = 400;
-    controls.maxPolarAngle = Math.PI / 2 + 0.1; // Slight below-horizon
+    controls.maxPolarAngle = Math.PI / 2 + 0.1;
+
+    // --- Selection / Raycasting state ---
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let modelRoot: THREE.Object3D | null = null;
+    const originalMaterials = new Map<
+      THREE.Mesh,
+      THREE.Material | THREE.Material[]
+    >();
+
+    const clearHighlight = () => {
+      originalMaterials.forEach((mat, mesh) => {
+        mesh.material = mat;
+      });
+      originalMaterials.clear();
+    };
+
+    const highlightNode = (node: THREE.Object3D) => {
+      clearHighlight();
+      node.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          originalMaterials.set(mesh, mesh.material);
+          const cloned = (
+            mesh.material as THREE.MeshStandardMaterial
+          ).clone();
+          cloned.emissive = new THREE.Color(0x2266cc);
+          cloned.emissiveIntensity = 0.45;
+          mesh.material = cloned;
+        }
+      });
+    };
+
+    // Distinguish click from orbit drag
+    let mouseDownPos = { x: 0, y: 0 };
+
+    const onMouseDown = (e: MouseEvent) => {
+      mouseDownPos = { x: e.clientX, y: e.clientY };
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      const dx = Math.abs(e.clientX - mouseDownPos.x);
+      const dy = Math.abs(e.clientY - mouseDownPos.y);
+      if (dx > 5 || dy > 5) return; // was a drag
+
+      if (!modelRoot) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects([modelRoot], true);
+
+      if (intersects.length > 0) {
+        // Walk up from hit mesh to find named IFC element node
+        let obj: THREE.Object3D | null = intersects[0].object;
+        while (obj && obj !== modelRoot) {
+          if (obj.name && metadataRef.current[obj.name]) {
+            break;
+          }
+          obj = obj.parent;
+        }
+
+        if (obj && obj.name && metadataRef.current[obj.name]) {
+          highlightNode(obj);
+          onElementSelectRef.current?.(metadataRef.current[obj.name]);
+        } else {
+          clearHighlight();
+          onElementSelectRef.current?.(null);
+        }
+      } else {
+        clearHighlight();
+        onElementSelectRef.current?.(null);
+      }
+    };
+
+    renderer.domElement.addEventListener("mousedown", onMouseDown);
+    renderer.domElement.addEventListener("mouseup", onMouseUp);
 
     // --- Load Model ---
     const loader = new GLTFLoader();
@@ -97,22 +203,36 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
       fullUrl,
       (gltf) => {
         const model = gltf.scene;
+        modelRoot = model;
 
-        // IFC files use Z-up; Three.js uses Y-up → rotate -90° around X
+        // IFC files use Z-up; Three.js uses Y-up
         model.rotation.x = -Math.PI / 2;
 
-        // Apply a clean architectural material
+        // Preserve original IFC colors — only adjust rendering properties
         model.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
             mesh.castShadow = true;
             mesh.receiveShadow = true;
-            mesh.material = new THREE.MeshStandardMaterial({
-              color: 0xb0bcc8,
-              roughness: 0.55,
-              metalness: 0.15,
-              side: THREE.DoubleSide,
-            });
+
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            mat.side = THREE.DoubleSide;
+
+            // Enable vertex colors if the GLB contains them (from IFC materials)
+            if (mesh.geometry.attributes.color) {
+              mat.vertexColors = true;
+              mat.needsUpdate = true;
+            } else if (
+              mat.color.r === 1 &&
+              mat.color.g === 1 &&
+              mat.color.b === 1 &&
+              !mesh.geometry.attributes.color
+            ) {
+              // No color data at all — apply a neutral default
+              mat.color = new THREE.Color(0xb0bcc8);
+              mat.roughness = 0.55;
+              mat.metalness = 0.15;
+            }
           }
         });
 
@@ -124,7 +244,7 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
         const fov = camera.fov * (Math.PI / 180);
-        const distance = maxDim / (2 * Math.tan(fov / 2)) * 1.3;
+        const distance = (maxDim / (2 * Math.tan(fov / 2))) * 1.3;
 
         camera.position.set(
           center.x + distance * 0.7,
@@ -134,7 +254,6 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
         camera.lookAt(center);
         controls.target.copy(center);
 
-        // Move ground under the model
         ground.position.y = box.min.y - 0.01;
         grid.position.y = box.min.y;
 
@@ -168,6 +287,8 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
     return () => {
       cancelAnimationFrame(animFrameId);
       window.removeEventListener("resize", handleResize);
+      renderer.domElement.removeEventListener("mousedown", onMouseDown);
+      renderer.domElement.removeEventListener("mouseup", onMouseUp);
       controls.dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
