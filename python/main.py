@@ -1,6 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import cv2
 import numpy as np
 import uvicorn
@@ -8,6 +9,9 @@ from contextlib import asynccontextmanager
 import io
 import os
 import shutil
+import uuid
+
+from backend.services.ifc_converter import convert_ifc_to_glb
 import sys
 
 # Add SmartAttendance to sys.path to allow internal imports to work
@@ -39,6 +43,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure models/ and uploads/ directories exist
+os.makedirs("models", exist_ok=True)
+os.makedirs("uploads", exist_ok=True)
+
+# Serve generated GLB files
+app.mount("/models", StaticFiles(directory="models"), name="models")
 
 @app.get("/")
 def read_root():
@@ -158,6 +169,42 @@ async def register_face_endpoint(
 async def reset_liveness_endpoint(source_id: str = Form(...)):
     reset_liveness(source_id)
     return {"status": "success", "message": f"Liveness state reset for {source_id}"}
+
+
+@app.post("/api/ifc/upload")
+async def upload_ifc(file: UploadFile = File(...)):
+    """
+    Accept an uploaded IFC file, convert it to GLB, and return the URL to the model.
+    """
+    if not file.filename or not file.filename.lower().endswith(".ifc"):
+        raise HTTPException(status_code=400, detail="Only .ifc files are accepted.")
+
+    # Save uploaded file with a unique name to avoid collisions
+    unique_id = uuid.uuid4().hex[:8]
+    upload_path = os.path.join("uploads", f"{unique_id}_{file.filename}")
+    try:
+        with open(upload_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        output_filename = f"building_{unique_id}.glb"
+        output_path = os.path.join("models", output_filename)
+
+        convert_ifc_to_glb(upload_path, output_path)
+
+        return JSONResponse(content={
+            "status": "success",
+            "model_url": f"/models/{output_filename}"
+        })
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        print(f"Error converting IFC file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up the temporary upload
+        if os.path.exists(upload_path):
+            os.remove(upload_path)
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
