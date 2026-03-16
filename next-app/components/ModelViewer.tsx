@@ -167,6 +167,9 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
     const container = containerRef.current;
     if (!container) return;
 
+    // Reset loading state every time the model URL changes
+    setIsLoading(true);
+
     // --- Scene ---
     const scene = new THREE.Scene();
     sceneRef.current = scene;
@@ -254,11 +257,18 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
       if (intersects.length > 0) {
         const object = intersects[0].object as THREE.Mesh;
 
-        // Resolve metadata: check _ifc_metadata JSON string first
-        let meta = object.userData;
-        if (meta && meta._ifc_metadata) {
+        // Resolve metadata: Three.js stores GLTF node extras in the object's
+        // userData. Try the mesh itself first, then its parent (some GLTF
+        // parsers put node-level extras one level up in the hierarchy).
+        let userData = object.userData as Record<string, unknown>;
+        if (!userData._ifc_metadata && object.parent) {
+          userData = { ...object.parent.userData, ...userData };
+        }
+
+        let meta: Record<string, unknown> = userData;
+        if (userData._ifc_metadata) {
           try {
-            meta = JSON.parse(meta._ifc_metadata);
+            meta = JSON.parse(userData._ifc_metadata as string);
           } catch {
             // keep original userData
           }
@@ -289,7 +299,7 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
       fullUrl,
       (gltf) => {
         const model = gltf.scene;
-        model.rotation.x = -Math.PI / 2; // IFC rotation fix
+        model.rotation.x = -Math.PI / 2; // IFC Y-up → Three.js Z-up rotation fix
 
         model.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
@@ -297,7 +307,12 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
             mesh.castShadow = true;
             mesh.receiveShadow = true;
 
-            // IFC geometry often has inward-facing normals — render both sides
+            // Compute normals if the GLB doesn't include them
+            if (mesh.geometry && !mesh.geometry.attributes.normal) {
+              mesh.geometry.computeVertexNormals();
+            }
+
+            // Ensure correct rendering: no metalness, double-sided faces
             const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
             mats.forEach((mat) => {
               const m = mat as THREE.MeshStandardMaterial;
@@ -308,11 +323,16 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
               m.needsUpdate = true;
             });
 
-            // Parse _ifc_metadata from extras into userData for quick raycaster lookup
-            if (mesh.userData && mesh.userData._ifc_metadata) {
+            // Merge GLTF node extras (from parent) into mesh.userData so the
+            // raycaster can find _ifc_metadata regardless of how the GLTF
+            // loader distributes extras across the hierarchy.
+            if (mesh.parent && mesh.parent.userData) {
+              mesh.userData = { ...mesh.parent.userData, ...mesh.userData };
+            }
+            // Parse _ifc_metadata into userData for quick raycaster lookup
+            if (mesh.userData._ifc_metadata) {
               try {
-                const parsed = JSON.parse(mesh.userData._ifc_metadata);
-                // Keep the parsed version alongside the raw string
+                const parsed = JSON.parse(mesh.userData._ifc_metadata as string);
                 mesh.userData = { ...mesh.userData, ...parsed };
               } catch {
                 // keep original
@@ -323,7 +343,7 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
 
         scene.add(model);
 
-        // Auto-fit camera
+        // Auto-fit camera to the loaded model
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
@@ -371,6 +391,11 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
       cancelAnimationFrame(frameId);
       window.removeEventListener("resize", handleResize);
       container.removeEventListener("pointerdown", onPointerDown);
+      // Remove the canvas from the DOM before disposing — critical in
+      // React StrictMode where effects are mounted/unmounted/remounted.
+      // Without this the old canvas stays hidden under the new one and
+      // the viewer appears blank.
+      renderer.domElement.remove();
       renderer.dispose();
       controls.dispose();
     };

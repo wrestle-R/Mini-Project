@@ -6,10 +6,10 @@ Extracts all physical building elements with native colors and full metadata.
 """
 
 import json
+import struct
 import ifcopenshell
 import ifcopenshell.geom
 import trimesh
-import trimesh.visual.material as trimesh_mat
 import numpy as np
 
 
@@ -39,7 +39,7 @@ def _safe_value(val):
         if isinstance(v, (float, int, bool, str)):
             return v
         return str(v)
-    if isinstance(v, (float, int, bool, str)):
+    if isinstance(val, (float, int, bool, str)):
         return val
     return str(val)
 
@@ -322,6 +322,100 @@ def _extract_rgba(diffuse) -> list:
     ]
 
 
+def _postprocess_glb(glb_path: str, element_extras: list) -> None:
+    """
+    Post-process a Trimesh-exported GLB to inject GLTF materials and metadata.
+
+    Trimesh does not reliably export PBRMaterial colours or mesh.metadata into
+    the GLB binary.  This function re-opens the file, modifies only the JSON
+    chunk (leaving the binary buffer untouched), and rewrites the GLB.
+
+    Args:
+        glb_path:       Path to the GLB file to modify in-place.
+        element_extras: List of dicts, one per element in the SAME order they
+                        were added to the Trimesh Scene.  Each dict contains:
+                          - "color":    [r, g, b, a] as floats in [0.0, 1.0]
+                          - "metadata": dict with at minimum GlobalId/Name/Type
+    """
+    with open(glb_path, "rb") as fh:
+        raw = bytearray(fh.read())
+
+    # ── GLB binary layout ─────────────────────────────────────────────────
+    # Byte  0-3:  magic "glTF"
+    # Byte  4-7:  version (2)
+    # Byte  8-11: total file length
+    # Byte 12-15: JSON chunk length (J)
+    # Byte 16-19: JSON chunk type  (0x4E4F534A = "JSON")
+    # Byte 20..20+J-1: JSON chunk data (4-byte padded with spaces)
+    # Byte 20+J..:     BIN chunk (optional; preserved verbatim)
+    # ──────────────────────────────────────────────────────────────────────
+    json_chunk_len = struct.unpack_from("<I", raw, 12)[0]
+    gltf = json.loads(raw[20: 20 + json_chunk_len])
+
+    # ── Build one GLTF material per element ───────────────────────────────
+    materials = []
+    for item in element_extras:
+        r, g, b, a = item["color"]
+        materials.append({
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [
+                    round(float(r), 4),
+                    round(float(g), 4),
+                    round(float(b), 4),
+                    round(float(a), 4),
+                ],
+                "metallicFactor": 0.0,
+                "roughnessFactor": 0.7,
+            },
+            "doubleSided": True,
+        })
+    gltf["materials"] = materials
+
+    # ── Walk geometry nodes in order and assign material + extras ─────────
+    # Trimesh always emits: node[0] = "world" (no mesh), then geometry_0,
+    # geometry_1, … in the same order as add_geometry() calls.
+    elem_idx = 0
+    for node in gltf.get("nodes", []):
+        mesh_idx = node.get("mesh")
+        if mesh_idx is None:
+            continue                        # skip the root "world" node
+        if elem_idx >= len(element_extras):
+            break
+
+        # Assign colour material to every primitive of this mesh
+        for prim in gltf["meshes"][mesh_idx]["primitives"]:
+            prim["material"] = elem_idx
+
+        # Inject IFC metadata into the GLTF node's extras so Three.js can
+        # read them via mesh.userData after GLTFLoader parses the file.
+        meta = element_extras[elem_idx]["metadata"]
+        node["extras"] = {
+            "GlobalId":      meta.get("GlobalId", ""),
+            "Name":          meta.get("Name", ""),
+            "Type":          meta.get("Type", ""),
+            "_ifc_metadata": json.dumps(meta, default=str),
+        }
+        elem_idx += 1
+
+    # ── Re-serialise JSON and rebuild the GLB ─────────────────────────────
+    new_json_bytes = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    # GLB spec requires the JSON chunk to be padded to a 4-byte boundary
+    # using space characters (0x20).
+    pad = (-len(new_json_bytes)) % 4
+    new_json_bytes += b" " * pad
+
+    # Preserve the BIN chunk (and any further chunks) verbatim
+    bin_tail = bytes(raw[20 + json_chunk_len:])
+
+    new_total_len = 12 + 8 + len(new_json_bytes) + len(bin_tail)
+
+    with open(glb_path, "wb") as fh:
+        fh.write(struct.pack("<4sII", b"glTF", 2, new_total_len))
+        fh.write(struct.pack("<II", len(new_json_bytes), 0x4E4F534A))  # "JSON"
+        fh.write(new_json_bytes)
+        fh.write(bin_tail)
+
+
 def convert_ifc_to_glb(input_path: str, output_path: str) -> None:
     """
     Load an IFC file, extract geometry for all physical building elements
@@ -341,6 +435,9 @@ def convert_ifc_to_glb(input_path: str, output_path: str) -> None:
     # Get all products (physical elements)
     products = ifc_file.by_type("IfcProduct")
     element_count = 0
+    # Parallel list to scene geometry: one entry per successfully added mesh.
+    # Used by _postprocess_glb to inject colours and metadata after export.
+    element_extras: list = []
 
     for element in products:
         # Skip abstract or non-physical items
@@ -361,52 +458,39 @@ def convert_ifc_to_glb(input_path: str, output_path: str) -> None:
             if mesh.is_empty:
                 continue
 
-            # --- Per-face color extraction ---
-            materials = shape.geometry.materials if hasattr(shape.geometry, "materials") else []
-            material_ids = shape.geometry.material_ids if hasattr(shape.geometry, "material_ids") else []
+            # --- Per-face color extraction → single averaged RGBA ---
+            geo_mats = shape.geometry.materials if hasattr(shape.geometry, "materials") else []
+            mat_ids = shape.geometry.material_ids if hasattr(shape.geometry, "material_ids") else []
 
-            if materials and material_ids and len(material_ids) == len(faces):
-                # Build per-face RGBA colors from the material assignments
+            if geo_mats and mat_ids and len(mat_ids) == len(faces):
                 face_colors = np.full((len(faces), 4), 180, dtype=np.uint8)
-                for i, mat_idx in enumerate(material_ids):
-                    if 0 <= mat_idx < len(materials):
-                        mat = materials[mat_idx]
-                        if hasattr(mat, "diffuse") and mat.diffuse:
-                            face_colors[i] = _extract_rgba(mat.diffuse)
-                # Average face colors → single PBR base color for GLTF material
-                avg = face_colors.mean(axis=0)
-                color_f = avg / 255.0
-            elif materials:
-                mat = materials[0]
-                if hasattr(mat, "diffuse") and mat.diffuse:
-                    rgba = _extract_rgba(mat.diffuse)
-                else:
-                    rgba = [180, 180, 180, 255]
+                for i, mat_idx in enumerate(mat_ids):
+                    if 0 <= mat_idx < len(geo_mats):
+                        gm = geo_mats[mat_idx]
+                        if hasattr(gm, "diffuse") and gm.diffuse:
+                            face_colors[i] = _extract_rgba(gm.diffuse)
+                color_f = face_colors.mean(axis=0) / 255.0
+            elif geo_mats:
+                gm = geo_mats[0]
+                rgba = _extract_rgba(gm.diffuse) if (hasattr(gm, "diffuse") and gm.diffuse) else [180, 180, 180, 255]
                 color_f = np.array(rgba) / 255.0
             else:
                 color_f = np.array([0.706, 0.706, 0.706, 1.0])
 
-            mesh.visual = trimesh.visual.TextureVisuals(
-                material=trimesh_mat.PBRMaterial(
-                    baseColorFactor=color_f.tolist(),
-                    metallicFactor=0.0,
-                    roughnessFactor=0.7,
-                )
-            )
-
             # --- Metadata ---
             all_meta = get_all_properties(element)
 
-            # Store the full metadata as a JSON string so it survives
-            # the Trimesh → GLTF extras pipeline without losing nested dicts.
-            mesh.metadata["GlobalId"] = all_meta.get("GlobalId", "")
-            mesh.metadata["Name"] = all_meta.get("Name", "")
-            mesh.metadata["Type"] = all_meta.get("Type", "")
-            mesh.metadata["_ifc_metadata"] = json.dumps(all_meta, default=str)
-
-            # Add to scene with a unique name
+            # Add geometry to scene (colours and metadata are injected into
+            # the GLB via _postprocess_glb after export — Trimesh does not
+            # reliably round-trip PBRMaterial or mesh.metadata to GLB).
             geom_name = f"{all_meta.get('Type', 'elem')}_{all_meta.get('GlobalId', str(element_count))}"
             scene.add_geometry(mesh, geom_name=geom_name)
+
+            # Record colour and metadata in the same order as geometry
+            element_extras.append({
+                "color":    color_f.tolist(),
+                "metadata": all_meta,
+            })
             element_count += 1
 
         except Exception as e:
@@ -421,3 +505,6 @@ def convert_ifc_to_glb(input_path: str, output_path: str) -> None:
         )
 
     scene.export(output_path, file_type="glb")
+
+    # Inject colours and IFC metadata that Trimesh cannot export by itself
+    _postprocess_glb(output_path, element_extras)
