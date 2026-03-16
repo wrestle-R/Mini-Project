@@ -16,11 +16,6 @@ export interface IContractorProfile extends Document {
   yearEstablished: number;
   licenseNumber: string;
   taxId: string;
-  serviceAreas: string[];
-  projectTypes: string[];
-  preferredProjectSize: "small" | "medium" | "large" | "any";
-  minProjectValue: number;
-  maxProjectValue: number;
   socialLinks: {
     website: string;
     linkedin: string;
@@ -80,28 +75,6 @@ const ContractorProfileSchema = new Schema<IContractorProfile>(
     taxId: {
       type: String,
       default: "",
-    },
-    serviceAreas: {
-      type: [String],
-      default: [],
-    },
-    projectTypes: {
-      type: [String],
-      default: [],
-      // e.g. ["Residential", "Commercial", "Industrial", "Infrastructure"]
-    },
-    preferredProjectSize: {
-      type: String,
-      enum: ["small", "medium", "large", "any"],
-      default: "any",
-    },
-    minProjectValue: {
-      type: Number,
-      default: 0,
-    },
-    maxProjectValue: {
-      type: Number,
-      default: 0,
     },
     socialLinks: {
       website: { type: String, default: "" },

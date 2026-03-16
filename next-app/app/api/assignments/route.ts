@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import ProjectContractorAssignment from "@/lib/models/ProjectContractorAssignment";
 import { verifyCustomToken } from "@/lib/auth";
+// Import models so Mongoose registers their schemas before .populate() runs
+import "@/lib/models/Project";
+import "@/lib/models/Contractor";
+import "@/lib/models/Customer";
 
 // Assign a contractor to a project (company only)
 export async function POST(req: Request) {

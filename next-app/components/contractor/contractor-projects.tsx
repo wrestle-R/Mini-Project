@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useContractor } from "@/contexts/ContractorContext";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Card,
@@ -19,12 +20,14 @@ import {
   FiUser,
   FiPhone,
   FiMail,
+  FiChevronRight,
 } from "react-icons/fi";
 
 interface Assignment {
   id: string;
-  project: { title: string; status: string; location: string } | null;
+  project: { _id?: string; title: string; status: string; location: string } | null;
   customer: { name: string; email: string; phone: string } | null;
+  contractor: { firstName: string; lastName: string; email: string } | null;
   status: string;
   notes: string;
   assignedAt: string;
@@ -32,6 +35,7 @@ interface Assignment {
 
 export function ContractorProjects() {
   const { token } = useContractor();
+  const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -76,7 +80,7 @@ export function ContractorProjects() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">My Projects</h1>
         <p className="text-muted-foreground">
-          Projects assigned to you by your company.
+          Projects assigned to you. Click on a project to view details and worker applications.
         </p>
       </div>
 
@@ -94,66 +98,80 @@ export function ContractorProjects() {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {assignments.map((a) => (
-            <Card key={a.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">
-                      {a.project?.title || "Untitled Project"}
-                    </CardTitle>
-                    <CardDescription>
-                      Assigned {new Date(a.assignedAt).toLocaleDateString()}
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <Badge variant="outline">{a.project?.status || "—"}</Badge>
-                    <Badge variant="secondary">{a.status}</Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  {a.project?.location && (
-                    <span className="flex items-center gap-1">
-                      <FiMapPin className="h-3.5 w-3.5" /> {a.project.location}
-                    </span>
-                  )}
-                </div>
+          {assignments.map((a) => {
+            // Extract project ID from populated object or string
+            const projectId =
+              (a.project as unknown as { _id?: string })?._id ||
+              (typeof a.project === "string" ? a.project : null);
 
-                {a.customer && (
-                  <div className="rounded-lg border p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-                      Customer
-                    </p>
-                    <div className="flex flex-wrap gap-4 text-sm">
-                      <span className="flex items-center gap-1">
-                        <FiUser className="h-3.5 w-3.5" /> {a.customer.name}
-                      </span>
-                      {a.customer.email && (
-                        <span className="flex items-center gap-1">
-                          <FiMail className="h-3.5 w-3.5" />{" "}
-                          {a.customer.email}
-                        </span>
-                      )}
-                      {a.customer.phone && (
-                        <span className="flex items-center gap-1">
-                          <FiPhone className="h-3.5 w-3.5" />{" "}
-                          {a.customer.phone}
-                        </span>
-                      )}
+            return (
+              <Card
+                key={a.id}
+                className="cursor-pointer transition-shadow hover:shadow-md group"
+                onClick={() => {
+                  if (projectId) {
+                    router.push(`/contractor/projects/${a.id}`);
+                  }
+                }}
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg group-hover:text-primary transition-colors">
+                        {a.project?.title || "Untitled Project"}
+                      </CardTitle>
+                      <CardDescription>
+                        Assigned {new Date(a.assignedAt).toLocaleDateString()}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{a.project?.status || "—"}</Badge>
+                      <Badge variant="secondary">{a.status}</Badge>
+                      <FiChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
                     </div>
                   </div>
-                )}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                    {a.project?.location && (
+                      <span className="flex items-center gap-1">
+                        <FiMapPin className="h-3.5 w-3.5" /> {a.project.location}
+                      </span>
+                    )}
+                  </div>
 
-                {a.notes && (
-                  <p className="text-sm text-muted-foreground italic">
-                    {a.notes}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {a.customer && (
+                    <div className="rounded-lg border p-3 space-y-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                        Customer
+                      </p>
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <span className="flex items-center gap-1">
+                          <FiUser className="h-3.5 w-3.5" /> {a.customer.name}
+                        </span>
+                        {a.customer.email && (
+                          <span className="flex items-center gap-1">
+                            <FiMail className="h-3.5 w-3.5" /> {a.customer.email}
+                          </span>
+                        )}
+                        {a.customer.phone && (
+                          <span className="flex items-center gap-1">
+                            <FiPhone className="h-3.5 w-3.5" /> {a.customer.phone}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {a.notes && (
+                    <p className="text-sm text-muted-foreground italic">
+                      {a.notes}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </motion.div>

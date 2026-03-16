@@ -1,12 +1,36 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { WorkerSidebar } from "@/components/worker/worker-sidebar";
 import { WorkerTopbar } from "@/components/worker/worker-topbar";
+import { useWorker } from "@/contexts/WorkerContext";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { user } = useWorker();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user.isLoaded && !user.firebaseUid) {
+      router.replace("/login");
+    }
+  }, [user.isLoaded, user.firebaseUid, router]);
+
+  if (!user.isLoaded) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user.firebaseUid) return null;
+
   return (
     <SidebarProvider>
       <WorkerSidebar />

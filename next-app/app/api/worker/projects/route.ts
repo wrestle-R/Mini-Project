@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Project from "@/lib/models/Project";
 import ProjectApplication from "@/lib/models/ProjectApplication";
+// Import Company so Mongoose registers its schema before .populate("companyId") runs
+import "@/lib/models/Company";
 
 // Verify Firebase token (same pattern as worker auth)
 async function verifyFirebaseToken(authHeader: string | null) {
@@ -23,7 +25,7 @@ async function verifyFirebaseToken(authHeader: string | null) {
   }
 }
 
-// Worker lists open projects
+// Worker lists open projects + their applications
 export async function GET(req: Request) {
   try {
     const authHeader = req.headers.get("authorization");
@@ -34,32 +36,60 @@ export async function GET(req: Request) {
 
     await dbConnect();
 
-    const projects = await Project.find({ isOpen: true })
-      .populate("companyId", "name sector")
-      .sort({ createdAt: -1 });
-
-    // Get worker's existing applications
+    // Get ALL of this worker's applications (any status)
     const applications = await ProjectApplication.find({
       workerFirebaseUid: fbUser.uid,
     });
-    const appliedProjectIds = new Set(
-      applications.map((a) => a.projectId.toString())
-    );
+    const appMap = new Map<string, { status: string; appliedAt: Date; message: string }>();
+    for (const a of applications) {
+      appMap.set(a.projectId.toString(), {
+        status: a.status,
+        appliedAt: a.appliedAt,
+        message: a.message,
+      });
+    }
+
+    // Get open projects (available to browse)
+    const openProjects = await Project.find({ isOpen: true })
+      .populate("companyId", "name sector")
+      .sort({ createdAt: -1 });
+
+    // Get projects the worker has applied to (including closed ones)
+    const appliedProjectIds = applications.map((a) => a.projectId);
+    const appliedProjects = await Project.find({
+      _id: { $in: appliedProjectIds },
+    })
+      .populate("companyId", "name sector")
+      .sort({ createdAt: -1 });
+
+    // Merge into a single deduplicated list
+    const projectMap = new Map<string, typeof openProjects[0]>();
+    for (const p of openProjects) projectMap.set(p._id.toString(), p);
+    for (const p of appliedProjects) {
+      if (!projectMap.has(p._id.toString())) projectMap.set(p._id.toString(), p);
+    }
+
+    const allProjects = Array.from(projectMap.values());
 
     return NextResponse.json({
-      projects: projects.map((p) => ({
-        id: p._id.toString(),
-        title: p.title,
-        description: p.description,
-        status: p.status,
-        location: p.location,
-        startDate: p.startDate,
-        endDate: p.endDate,
-        budget: p.budget,
-        company: p.companyId,
-        hasApplied: appliedProjectIds.has(p._id.toString()),
-        createdAt: p.createdAt,
-      })),
+      projects: allProjects.map((p) => {
+        const app = appMap.get(p._id.toString());
+        return {
+          id: p._id.toString(),
+          title: p.title,
+          description: p.description,
+          status: p.status,
+          location: p.location,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          budget: p.budget,
+          isOpen: p.isOpen,
+          company: p.companyId,
+          applicationStatus: app?.status || null, // "pending" | "accepted" | "rejected" | null
+          appliedAt: app?.appliedAt || null,
+          createdAt: p.createdAt,
+        };
+      }),
     });
   } catch (error) {
     console.error("[API/worker/projects] Error:", error);
