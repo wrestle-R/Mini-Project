@@ -48,7 +48,7 @@ function AdminAuthGate({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="theme-admin flex min-h-screen items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -82,13 +82,15 @@ function AdminAuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-      <AdminSidebar />
-      <main className="w-full min-h-screen bg-background">
-        <AdminTopbar />
-        <div className="p-4 md:p-6 relative">{children}</div>
-      </main>
-    </SidebarProvider>
+    <div className="theme-admin">
+      <SidebarProvider>
+        <AdminSidebar />
+        <main className="w-full min-h-screen bg-background">
+          <AdminTopbar />
+          <div className="p-4 md:p-6 relative">{children}</div>
+        </main>
+      </SidebarProvider>
+    </div>
   );
 }
 

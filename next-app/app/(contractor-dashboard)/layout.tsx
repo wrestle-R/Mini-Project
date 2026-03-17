@@ -23,7 +23,7 @@ export default function ContractorDashboardLayout({
 
   if (!user.isLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="theme-contractor flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
@@ -32,12 +32,14 @@ export default function ContractorDashboardLayout({
   if (!user.id) return null;
 
   return (
-    <SidebarProvider>
-      <ContractorSidebar />
-      <main className="w-full min-h-screen bg-background">
-        <ContractorTopbar />
-        <div className="p-4 md:p-6 relative">{children}</div>
-      </main>
-    </SidebarProvider>
+    <div className="theme-contractor">
+      <SidebarProvider>
+        <ContractorSidebar />
+        <main className="w-full min-h-screen bg-background">
+          <ContractorTopbar />
+          <div className="p-4 md:p-6 relative">{children}</div>
+        </main>
+      </SidebarProvider>
+    </div>
   );
 }
