@@ -115,8 +115,6 @@ export function WorkerProvider({ children }: { children: React.ReactNode }) {
         role: "worker",
         isLoaded: true,
       });
-
-      toast.success("Welcome back!");
     } catch (err) {
       console.error("[WorkerContext] Sync error:", err);
       toast.error("Authentication failed. Please try again.");
@@ -154,7 +152,7 @@ export function WorkerProvider({ children }: { children: React.ReactNode }) {
     setUser({ ...defaultState, isLoaded: true });
     localStorage.removeItem(STORAGE_KEY);
     firebaseSignOut(auth).then(() => {
-      router.push("/");
+      router.push("/login");
     });
   }, [router]);
 
