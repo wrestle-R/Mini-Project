@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCompany } from "@/contexts/CompanyContext";
 import {
   Card,
@@ -20,6 +20,11 @@ export default function CompanyLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.add("theme-company");
+    return () => document.body.classList.remove("theme-company");
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

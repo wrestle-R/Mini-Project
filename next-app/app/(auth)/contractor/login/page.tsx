@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useContractor } from "@/contexts/ContractorContext";
 import {
   Card,
@@ -20,6 +20,11 @@ export default function ContractorLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.add("theme-contractor");
+    return () => document.body.classList.remove("theme-contractor");
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
