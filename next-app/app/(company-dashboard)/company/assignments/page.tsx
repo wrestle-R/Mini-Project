@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { motion } from "framer-motion";
 import {
@@ -54,7 +54,7 @@ export default function CompanyAssignmentsPage() {
     notes: "",
   });
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     if (!token) return;
     try {
       const [aRes, pRes, cRes, cuRes] = await Promise.all([
@@ -111,11 +111,11 @@ export default function CompanyAssignmentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchAll();
-  }, [token]);
+  }, [fetchAll]);
 
   const handleCreate = async () => {
     if (!token || !form.projectId || !form.contractorId) {

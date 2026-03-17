@@ -353,7 +353,6 @@ function WorkerProfilePanel({
 /* ─────────────────── Project Applications Row ─────────────────── */
 
 function ProjectApplicationsRow({
-  projectId,
   projectTitle,
   projectStatus,
   projectLocation,
@@ -361,7 +360,6 @@ function ProjectApplicationsRow({
   token,
   onStatusChange,
 }: {
-  projectId: string;
   projectTitle: string;
   projectStatus: string;
   projectLocation: string;
@@ -637,7 +635,6 @@ export function ContractorApplications() {
           {projectEntries.map(([projectId, { project, apps }]) => (
             <ProjectApplicationsRow
               key={projectId}
-              projectId={projectId}
               projectTitle={project?.title || "Untitled Project"}
               projectStatus={project?.status || "—"}
               projectLocation={project?.location || ""}

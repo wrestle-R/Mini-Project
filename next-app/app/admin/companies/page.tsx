@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "@/contexts/AdminContext";
 import {
   Card,
@@ -26,7 +26,7 @@ export default function AdminCompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/companies", {
@@ -43,11 +43,11 @@ export default function AdminCompaniesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [secret]);
 
   useEffect(() => {
     if (secret) fetchCompanies();
-  }, [secret]);
+  }, [secret, fetchCompanies]);
 
   return (
     <div className="space-y-6">

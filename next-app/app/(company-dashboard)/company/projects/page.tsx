@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { motion } from "framer-motion";
 import {
@@ -42,7 +42,7 @@ export default function CompanyProjectsPage() {
     budget: "",
   });
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     if (!token) return;
     try {
       const res = await fetch("/api/projects", {
@@ -57,11 +57,11 @@ export default function CompanyProjectsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchProjects();
-  }, [token]);
+  }, [fetchProjects]);
 
   const handleCreate = async () => {
     if (!token || !form.title.trim()) {

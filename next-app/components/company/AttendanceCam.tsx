@@ -32,6 +32,7 @@ interface MatchData {
   name: string;
   score: number;
   bbox: number[];
+  ppe?: { compliant: boolean; hard_hat: boolean; vest: boolean };
 }
 
 interface RecognitionResponse {
