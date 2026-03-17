@@ -16,3 +16,4 @@ node_modules/
 *.pt
 *.csv
 *.glb
+*.json
