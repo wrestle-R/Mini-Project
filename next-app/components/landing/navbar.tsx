@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react'
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
+import { GoogleTranslateLanguageSelector } from '@/components/shared/google-translate'
 
 const NavItem = ({ item, onNavigate }: { item: { name: string; link: string; external?: boolean }; onNavigate: (id: string) => void }) => {
     return (
@@ -105,6 +106,8 @@ export function Navbar() {
                     </motion.nav>
 
                     <div className="flex items-center space-x-3">
+                        <GoogleTranslateLanguageSelector iconOnly />
+
                         <motion.button
                             onClick={handleThemeToggle}
                             whileHover={{ scale: 1.05 }}
@@ -266,6 +269,8 @@ export function Navbar() {
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                         className="md:hidden absolute top-full left-0 right-0 mt-2 mx-6">
                         <div className="backdrop-blur-xl rounded-2xl p-4 space-y-2 shadow-2xl bg-muted/50 border border-border">
+                            <GoogleTranslateLanguageSelector iconOnly />
+
                             {navItems.map((item, idx) => (
                                 <motion.a
                                     key={idx}

@@ -41,6 +41,7 @@ import {
   FiClipboard,
   FiCamera,
 } from "react-icons/fi";
+import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
 
 export function CompanySidebar() {
   const pathname = usePathname();
@@ -110,6 +111,13 @@ export function CompanySidebar() {
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <GoogleTranslateLanguageSelector
+              variant="sidebar"
+              compact={state === "collapsed"}
+            />
+          </SidebarMenuItem>
+
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

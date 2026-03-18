@@ -8,6 +8,7 @@ import { ContractorProvider } from "@/contexts/ContractorContext";
 import { CompanyProvider } from "@/contexts/CompanyContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { GoogleTranslateProvider } from "@/components/shared/google-translate";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -40,6 +41,7 @@ export default function RootLayout({
                 <TooltipProvider>
                   {children}
                 </TooltipProvider>
+                <GoogleTranslateProvider />
               </CompanyProvider>
             </ContractorProvider>
           </WorkerProvider>

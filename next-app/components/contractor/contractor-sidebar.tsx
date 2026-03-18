@@ -33,6 +33,7 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar";
 import { Building2, Sun, Moon, ChevronUp, LogOut, User } from "lucide-react";
+import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
 
 import { FiHome, FiFolder } from "react-icons/fi";
 
@@ -118,6 +119,13 @@ export function ContractorSidebar() {
       {/* ── Footer ── */}
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <GoogleTranslateLanguageSelector
+              variant="sidebar"
+              compact={state === "collapsed"}
+            />
+          </SidebarMenuItem>
+
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -381,3 +381,17 @@
     letter-spacing: var(--tracking-normal);
   }
 }
+
+/* Google Translate cleanup to avoid default injected UI clashing with app theme. */
+.skiptranslate iframe,
+.goog-te-banner-frame,
+.goog-te-gadget,
+.goog-logo-link,
+#goog-gt-tt,
+.goog-te-balloon-frame {
+  display: none !important;
+}
+
+body {
+  top: 0 !important;
+}
