@@ -12,16 +12,18 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = useWorker();
+  const { user, firebaseUser } = useWorker();
   const router = useRouter();
 
   useEffect(() => {
-    if (user.isLoaded && !user.firebaseUid) {
+    if (user.isLoaded && !user.firebaseUid && !firebaseUser) {
       router.replace("/login");
     }
-  }, [user.isLoaded, user.firebaseUid, router]);
+  }, [user.isLoaded, user.firebaseUid, firebaseUser, router]);
 
-  if (!user.isLoaded) {
+  // Keep protected pages in loading state while Firebase auth is ready
+  // but WorkerContext sync has not populated the worker profile yet.
+  if (!user.isLoaded || (!!firebaseUser && !user.firebaseUid)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -29,7 +31,7 @@ export default function DashboardLayout({
     );
   }
 
-  if (!user.firebaseUid) return null;
+  if (!user.firebaseUid && !firebaseUser) return null;
 
   return (
     <SidebarProvider>
