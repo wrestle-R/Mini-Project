@@ -15,7 +15,7 @@ import { motion } from "framer-motion";
 import { useWorker } from "@/contexts/WorkerContext";
 
 export default function LoginPage() {
-  const { user } = useWorker();
+  const { user, firebaseUser } = useWorker();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,13 +30,13 @@ export default function LoginPage() {
 
   // Redirect already-authenticated users away from the login page
   useEffect(() => {
-    if (user.isLoaded && user.firebaseUid) {
+    if (user.isLoaded && (user.firebaseUid || firebaseUser)) {
       router.replace("/dashboard");
     }
-  }, [user.isLoaded, user.firebaseUid, router]);
+  }, [user.isLoaded, user.firebaseUid, firebaseUser, router]);
 
   // Show nothing while we figure out if user is logged in
-  if (!user.isLoaded || user.firebaseUid) {
+  if (!user.isLoaded || user.firebaseUid || firebaseUser) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
