@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Languages } from "lucide-react";
+import { Check, ChevronDown, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 declare global {
   interface Window {
@@ -24,6 +30,7 @@ type GoogleTranslateLanguageSelectorProps = {
   variant?: SelectorVariant;
   className?: string;
   compact?: boolean;
+  iconOnly?: boolean;
 };
 
 const INCLUDED_LANGUAGES = "en,hi,mr,bn,gu,ta,te,kn,ml,pa,ur,or,as";
@@ -161,8 +168,10 @@ export function GoogleTranslateLanguageSelector({
   variant = "navbar",
   className,
   compact = false,
+  iconOnly = false,
 }: GoogleTranslateLanguageSelectorProps) {
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const isIconOnly = iconOnly || compact;
 
   const wrapperClassName = useMemo(() => {
     if (variant === "sidebar") {
@@ -197,36 +206,62 @@ export function GoogleTranslateLanguageSelector({
     }
   };
 
-  return (
-    <div className={wrapperClassName}>
-      <Languages
-        className={cn(
-          "h-4 w-4 shrink-0 text-primary",
-          variant === "sidebar" && "text-sidebar-primary"
-        )}
-        aria-hidden="true"
-      />
+  const selectedLabel =
+    LANGUAGE_OPTIONS.find((language) => language.code === selectedLanguage)?.label ||
+    "English";
 
-      {!compact && (
-        <>
-          <span className="text-xs font-medium opacity-80">Language</span>
-          <select
-            aria-label="Change website language"
-            value={selectedLanguage}
-            onChange={(event) => handleLanguageChange(event.target.value)}
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Change website language"
+          title={`Language: ${selectedLabel}`}
+          className={cn(
+            wrapperClassName,
+            isIconOnly &&
+              (variant === "sidebar"
+                ? "h-8 w-full justify-center"
+                : "h-9 w-9 justify-center p-0")
+          )}
+        >
+          <Globe
             className={cn(
-              "min-w-[7.5rem] bg-transparent text-sm outline-none",
-              variant === "sidebar" ? "text-sidebar-foreground" : "text-foreground"
+              "h-4 w-4 shrink-0 text-primary",
+              variant === "sidebar" && "text-sidebar-primary"
             )}
+            aria-hidden="true"
+          />
+
+          {!isIconOnly && (
+            <>
+              <span className="text-xs font-medium opacity-80">{selectedLabel}</span>
+              <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+            </>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent
+        align="end"
+        sideOffset={6}
+        className="min-w-44"
+      >
+        {LANGUAGE_OPTIONS.map((language) => (
+          <DropdownMenuItem
+            key={language.code}
+            onClick={() => handleLanguageChange(language.code)}
+            className="cursor-pointer"
           >
-            {LANGUAGE_OPTIONS.map((language) => (
-              <option key={language.code} value={language.code}>
-                {language.label}
-              </option>
-            ))}
-          </select>
-        </>
-      )}
-    </div>
+            <span className="mr-2 inline-flex w-4 items-center justify-center">
+              {selectedLanguage === language.code ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : null}
+            </span>
+            {language.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

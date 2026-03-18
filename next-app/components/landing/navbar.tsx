@@ -106,7 +106,7 @@ export function Navbar() {
                     </motion.nav>
 
                     <div className="flex items-center space-x-3">
-                        <GoogleTranslateLanguageSelector />
+                        <GoogleTranslateLanguageSelector iconOnly />
 
                         <motion.button
                             onClick={handleThemeToggle}
@@ -269,7 +269,7 @@ export function Navbar() {
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                         className="md:hidden absolute top-full left-0 right-0 mt-2 mx-6">
                         <div className="backdrop-blur-xl rounded-2xl p-4 space-y-2 shadow-2xl bg-muted/50 border border-border">
-                            <GoogleTranslateLanguageSelector className="w-full justify-between rounded-xl" />
+                            <GoogleTranslateLanguageSelector iconOnly />
 
                             {navItems.map((item, idx) => (
                                 <motion.a
