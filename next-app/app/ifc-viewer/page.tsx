@@ -39,6 +39,7 @@ interface ChatMessage {
 export default function IFCViewerPage() {
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [metadataUrl, setMetadataUrl] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -67,7 +68,9 @@ export default function IFCViewerPage() {
     setErrorMsg("");
     setModelUrl(null);
     setMetadataUrl(null);
+    setProjectId(null);
     setSelectedElement(null);
+    setMessages([]);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -84,8 +87,9 @@ export default function IFCViewerPage() {
       }
 
       const data = await res.json();
+      setProjectId(data.project_id);
       setModelUrl(data.model_url);
-      setMetadataUrl(data.json_url ?? data.metadata_url ?? null);
+      setMetadataUrl(data.metadata_url ?? null);
       setStatus("success");
     } catch (err: unknown) {
       setStatus("error");
@@ -99,7 +103,7 @@ export default function IFCViewerPage() {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || !projectId) return;
 
     const userMessage: ChatMessage = {
       id: `msg_${Date.now()}`,
@@ -114,24 +118,40 @@ export default function IFCViewerPage() {
     setChatLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/api/chat", {
+      const formData = new FormData();
+      formData.append("message", userMessage.content);
+
+      const res = await fetch(`http://localhost:8000/api/chat/${projectId}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: userMessage.content }),
+        body: formData,
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data?.message ?? "Failed to parse instruction");
+        throw new Error(data?.message ?? "Failed to process instruction");
       }
+
+      if (data.reply) {
+        const assistantReply: ChatMessage = {
+          id: `msg_${Date.now()}_reply`,
+          role: "assistant",
+          content: data.reply,
+          timestamp: Date.now(),
+        };
+
+        setMessages((prev) => [...prev, assistantReply]);
+        return;
+      }
+
+      // Update model viewer with new GLB (cache bust with timestamp)
+      const newModelUrl = data.model_url + "?t=" + Date.now();
+      setModelUrl(newModelUrl);
 
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_ai`,
         role: "assistant",
-        content: `Action parsed successfully`,
+        content: `Action: ${data.action.action}`,
         timestamp: Date.now(),
         action: data.action,
       };

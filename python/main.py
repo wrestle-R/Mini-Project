@@ -10,8 +10,16 @@ import io
 import os
 import shutil
 import uuid
+import json
 
-from backend.services.ifc_converter import convert_ifc_to_glb
+# IFC Processing Pipeline
+from backend.services.model_builder import build_internal_model
+from backend.services.geometry_generator import generate_glb_from_model
+
+# Chatbot and Model Editing
+from backend.ai.chatbot import parse_instruction, ActionValidationError
+from backend.services.model_editor import execute_action, validate_model, ModelEditorError
+
 import sys
 
 # Add SmartAttendance to sys.path to allow internal imports to work
@@ -44,12 +52,66 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure models/ and uploads/ directories exist
+# Ensure directories exist
 os.makedirs("models", exist_ok=True)
 os.makedirs("uploads", exist_ok=True)
+os.makedirs("data/models", exist_ok=True)
+os.makedirs("data/glb", exist_ok=True)
 
-# Serve generated GLB files
+# Serve generated GLB and data files
 app.mount("/models", StaticFiles(directory="models"), name="models")
+app.mount("/data", StaticFiles(directory="data"), name="data")
+
+
+def _is_conversational_message(message: str) -> bool:
+    text = message.strip().lower()
+    if not text:
+        return True
+
+    conversational_starts = (
+        "hello",
+        "hi",
+        "hey",
+        "hellp",
+        "help",
+        "thanks",
+        "thank you",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "who are you",
+        "what can you do",
+    )
+    edit_keywords = (
+        "wall",
+        "column",
+        "slab",
+        "door",
+        "window",
+        "beam",
+        "roof",
+        "space",
+        "stair",
+        "member",
+        "add",
+        "remove",
+        "update",
+        "change",
+        "duplicate",
+        "move",
+        "rotate",
+        "scale",
+        "color",
+        "colour",
+    )
+
+    if any(text.startswith(prefix) for prefix in conversational_starts):
+        return True
+
+    if len(text.split()) <= 3 and not any(keyword in text for keyword in edit_keywords):
+        return True
+
+    return False
 
 @app.get("/")
 def read_root():
@@ -174,38 +236,164 @@ async def reset_liveness_endpoint(source_id: str = Form(...)):
 @app.post("/api/ifc/upload")
 async def upload_ifc(file: UploadFile = File(...)):
     """
-    Accept an uploaded IFC file, convert it to GLB, and return the URL to the model.
+    Accept an uploaded IFC file, convert to internal JSON model,
+    then generate GLB. Returns project_id for subsequent chat requests.
+    
+    Pipeline: IFC → JSON (source of truth) → GLB (regenerable)
     """
     if not file.filename or not file.filename.lower().endswith(".ifc"):
         raise HTTPException(status_code=400, detail="Only .ifc files are accepted.")
 
-    # Save uploaded file with a unique name to avoid collisions
-    unique_id = uuid.uuid4().hex[:8]
-    upload_path = os.path.join("uploads", f"{unique_id}_{file.filename}")
+    project_id = f"project_{uuid.uuid4().hex[:8]}"
+    upload_path = os.path.join("uploads", f"{project_id}_{file.filename}")
+    
     try:
+        # Save uploaded file
         with open(upload_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        output_filename = f"building_{unique_id}.glb"
-        output_path = os.path.join("models", output_filename)
+        # Step 1: Parse IFC → internal JSON model
+        model = build_internal_model(upload_path, project_id)
 
-        metadata_path = convert_ifc_to_glb(upload_path, output_path)
-        metadata_filename = os.path.basename(metadata_path)
-
+        if len(model.get("elements", [])) == 0:
+            raise ValueError(
+                "No supported/renderable IFC elements were extracted. "
+                "Check IFC content or extend element type mapping in model_builder."
+            )
+        
+        # Save JSON (source of truth)
+        json_path = os.path.join("data/models", f"{project_id}.json")
+        with open(json_path, 'w') as f:
+            json.dump(model, f, indent=2)
+        
+        # Step 2: Generate GLB from JSON
+        glb_path = os.path.join("data/glb", f"{project_id}.glb")
+        generate_glb_from_model(json_path, glb_path)
+        
+        # Extract metadata from model for frontend
+        metadata = {}
+        for elem in model.get("elements", []):
+            metadata[elem["id"]] = {
+                "globalId": elem["id"],
+                "type": elem.get("type"),
+                "name": elem.get("name"),
+                "description": "",
+                "objectType": elem.get("type"),
+                "properties": elem.get("properties", {})
+            }
+        
+        # Save metadata
+        metadata_path = os.path.join("data/models", f"{project_id}_metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
         return JSONResponse(content={
             "status": "success",
-            "model_url": f"/models/{output_filename}",
-            "metadata_url": f"/models/{metadata_filename}",
+            "project_id": project_id,
+            "model_url": f"/data/glb/{project_id}.glb",
+            "json_url": f"/data/models/{project_id}.json",
+            "metadata_url": f"/data/models/{project_id}_metadata.json",
         })
     except ValueError as e:
+        print(f"Validation error: {e}")
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        print(f"Error converting IFC file: {e}")
+        print(f"Error processing IFC file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Clean up the temporary upload
+        # Clean up temporary upload
         if os.path.exists(upload_path):
             os.remove(upload_path)
+
+
+@app.post("/api/chat/{project_id}")
+async def chat_with_model(project_id: str, message: str = Form(...)):
+    """
+    Process natural language instruction and update model.
+    
+    Flow:
+    1. Parse instruction → JSON action (via LLM)
+    2. Validate action
+    3. Load JSON model
+    4. Execute action (modify model)
+    5. Validate modified model
+    6. Save JSON
+    7. Regenerate GLB
+    8. Return new model_url
+    """
+    try:
+        if _is_conversational_message(message):
+            return JSONResponse(content={
+                "status": "success",
+                "reply": "Hello. I can help edit the IFC model. Try commands like 'make all walls taller' or 'change the slab color to gray'."
+            })
+
+        # Step 1: Parse instruction with LLM
+        action = parse_instruction(message)
+        
+        # Step 2: Load JSON model
+        json_path = os.path.join("data/models", f"{project_id}.json")
+        if not os.path.exists(json_path):
+            raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+        
+        with open(json_path, 'r') as f:
+            model = json.load(f)
+        
+        # Step 3: Execute action on model
+        modified_model = execute_action(model, action)
+        
+        # Step 4: Validate modified model
+        validate_model(modified_model)
+        
+        # Step 5: Save modified JSON
+        with open(json_path, 'w') as f:
+            json.dump(modified_model, f, indent=2)
+        
+        # Step 6: Regenerate GLB
+        glb_path = os.path.join("data/glb", f"{project_id}.glb")
+        generate_glb_from_model(json_path, glb_path)
+        
+        # Step 7: Update metadata
+        metadata = {}
+        for elem in modified_model.get("elements", []):
+            metadata[elem["id"]] = {
+                "globalId": elem["id"],
+                "type": elem.get("type"),
+                "name": elem.get("name"),
+                "description": "",
+                "objectType": elem.get("type"),
+                "properties": elem.get("properties", {})
+            }
+        
+        metadata_path = os.path.join("data/models", f"{project_id}_metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        return JSONResponse(content={
+            "status": "success",
+            "action": action,
+            "model_url": f"/data/glb/{project_id}.glb",
+            "message": f"Action '{action.get('action')}' executed successfully"
+        })
+    
+    except ActionValidationError as e:
+        return JSONResponse(status_code=422, content={
+            "status": "error",
+            "message": f"Invalid action: {str(e)}"
+        })
+    
+    except ModelEditorError as e:
+        return JSONResponse(status_code=400, content={
+            "status": "error",
+            "message": f"Model edit failed: {str(e)}"
+        })
+    
+    except Exception as e:
+        print(f"Error in chat endpoint: {e}")
+        return JSONResponse(status_code=500, content={
+            "status": "error",
+            "message": str(e)
+        })
 
 
 if __name__ == "__main__":

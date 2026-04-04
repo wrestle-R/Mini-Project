@@ -30,10 +30,23 @@ export default function ModelViewer({
   const onElementSelectRef = useRef(onElementSelect);
   onElementSelectRef.current = onElementSelect;
 
+  // Store scene objects to avoid reinitializing on model reload
+  const sceneRef = useRef<{
+    renderer?: THREE.WebGLRenderer;
+    scene?: THREE.Scene;
+    camera?: THREE.PerspectiveCamera;
+    controls?: OrbitControls;
+    animFrameId?: number;
+    modelRoot?: THREE.Object3D;
+  }>({});
+
   // Fetch metadata when URL changes
   useEffect(() => {
     if (!metadataUrl) return;
-    fetch(`http://localhost:8000${metadataUrl}`)
+    const metadataPath = metadataUrl.startsWith("http")
+      ? metadataUrl
+      : `http://localhost:8000${metadataUrl}`;
+    fetch(metadataPath)
       .then((res) => res.json())
       .then((data) => {
         metadataRef.current = data;
@@ -41,21 +54,21 @@ export default function ModelViewer({
       .catch((err) => console.error("Failed to load metadata:", err));
   }, [metadataUrl]);
 
+  // Initialize scene (only once)
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || sceneRef.current.renderer) return; // Already initialized
 
     // --- Scene ---
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111113);
-    scene.fog = new THREE.FogExp2(0x111113, 0.003);
 
     // --- Camera ---
     const camera = new THREE.PerspectiveCamera(
       50,
       container.clientWidth / container.clientHeight,
       0.1,
-      5000
+      100000
     );
     camera.position.set(30, 25, 30);
 
@@ -71,6 +84,17 @@ export default function ModelViewer({
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
+
+    const resizeRenderer = () => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      if (width === 0 || height === 0) return;
+
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+    };
 
     // --- Lighting ---
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -113,13 +137,12 @@ export default function ModelViewer({
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.minDistance = 2;
-    controls.maxDistance = 400;
+    controls.maxDistance = 100000;
     controls.maxPolarAngle = Math.PI / 2 + 0.1;
 
     // --- Selection / Raycasting state ---
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    let modelRoot: THREE.Object3D | null = null;
     const originalMaterials = new Map<
       THREE.Mesh,
       THREE.Material | THREE.Material[]
@@ -160,19 +183,18 @@ export default function ModelViewer({
       const dy = Math.abs(e.clientY - mouseDownPos.y);
       if (dx > 5 || dy > 5) return; // was a drag
 
-      if (!modelRoot) return;
+      if (!sceneRef.current.modelRoot) return;
 
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects([modelRoot], true);
+      const intersects = raycaster.intersectObjects([sceneRef.current.modelRoot], true);
 
       if (intersects.length > 0) {
-        // Walk up from hit mesh to find named IFC element node
         let obj: THREE.Object3D | null = intersects[0].object;
-        while (obj && obj !== modelRoot) {
+        while (obj && obj !== sceneRef.current.modelRoot) {
           if (obj.name && metadataRef.current[obj.name]) {
             break;
           }
@@ -195,20 +217,92 @@ export default function ModelViewer({
     renderer.domElement.addEventListener("mousedown", onMouseDown);
     renderer.domElement.addEventListener("mouseup", onMouseUp);
 
-    // --- Load Model ---
+    // --- Animation loop ---
+    const animate = () => {
+      sceneRef.current.animFrameId = requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    resizeRenderer();
+
+    // --- Resize handler ---
+    const resizeObserver = new ResizeObserver(() => {
+      resizeRenderer();
+    });
+    resizeObserver.observe(container);
+
+    const handleWindowResize = () => {
+      resizeRenderer();
+    };
+    window.addEventListener("resize", handleWindowResize);
+
+    // Store references
+    sceneRef.current = {
+      renderer,
+      scene,
+      camera,
+      controls,
+      animFrameId: 0,
+    };
+
+    // --- Cleanup on unmount ---
+    return () => {
+      if (sceneRef.current.animFrameId) {
+        cancelAnimationFrame(sceneRef.current.animFrameId);
+      }
+      window.removeEventListener("resize", handleWindowResize);
+      resizeObserver.disconnect();
+      renderer.domElement.removeEventListener("mousedown", onMouseDown);
+      renderer.domElement.removeEventListener("mouseup", onMouseUp);
+      controls.dispose();
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
+    };
+  }, []); // Empty dependency array - initialize only once
+
+  // Load/reload model when URL changes
+  useEffect(() => {
+    const { scene, camera, controls } = sceneRef.current;
+    if (!scene || !camera || !controls) return;
+
+    // Remove old model if exists
+    if (sceneRef.current.modelRoot) {
+      scene.remove(sceneRef.current.modelRoot);
+      sceneRef.current.modelRoot = undefined;
+    }
+
     const loader = new GLTFLoader();
-    const fullUrl = `http://localhost:8000${modelUrl}`;
+    const fullUrl = modelUrl.startsWith("http")
+      ? modelUrl
+      : `http://localhost:8000${modelUrl}`;
 
     loader.load(
       fullUrl,
       (gltf) => {
         const model = gltf.scene;
-        modelRoot = model;
+        sceneRef.current.modelRoot = model;
 
-        // IFC files use Z-up; Three.js uses Y-up
+        // Normalize model to scene origin before and after the axis adjustment.
+        // Some GLB exports shift their center when rotated, so we frame again after
+        // converting from IFC's Z-up to Three.js Y-up.
+        const bounds = new THREE.Box3().setFromObject(model);
+        const center = bounds.getCenter(new THREE.Vector3());
+        model.position.sub(center);
+
+        // IFC files use Z-up; Three.js uses Y-up.
+        // Apply the rotation after centering so it doesn't swing the model away from view.
         model.rotation.x = -Math.PI / 2;
 
-        // Preserve original IFC colors — only adjust rendering properties
+        const framedBounds = new THREE.Box3().setFromObject(model);
+        const framedCenter = framedBounds.getCenter(new THREE.Vector3());
+        const framedSize = framedBounds.getSize(new THREE.Vector3());
+        model.position.sub(framedCenter);
+
+        // Preserve original IFC colors
         model.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
@@ -218,7 +312,7 @@ export default function ModelViewer({
             const mat = mesh.material as THREE.MeshStandardMaterial;
             mat.side = THREE.DoubleSide;
 
-            // Enable vertex colors if the GLB contains them (from IFC materials)
+            // Enable vertex colors if available
             if (mesh.geometry.attributes.color) {
               mat.vertexColors = true;
               mat.needsUpdate = true;
@@ -228,7 +322,7 @@ export default function ModelViewer({
               mat.color.b === 1 &&
               !mesh.geometry.attributes.color
             ) {
-              // No color data at all — apply a neutral default
+              // Apply neutral default
               mat.color = new THREE.Color(0xb0bcc8);
               mat.roughness = 0.55;
               mat.metalness = 0.15;
@@ -239,23 +333,36 @@ export default function ModelViewer({
         scene.add(model);
 
         // Fit camera to model bounds
-        const box = new THREE.Box3().setFromObject(model);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
+        const maxDim = Math.max(framedSize.x, framedSize.y, framedSize.z);
+        const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0.01 ? maxDim : 10;
         const fov = camera.fov * (Math.PI / 180);
-        const distance = (maxDim / (2 * Math.tan(fov / 2))) * 1.3;
+        const distance = Math.max(
+          (safeMaxDim / (2 * Math.tan(fov / 2))) * 1.3,
+          12
+        );
 
         camera.position.set(
-          center.x + distance * 0.7,
-          center.y + distance * 0.5,
-          center.z + distance * 0.7
+          distance * 0.7,
+          distance * 0.5,
+          distance * 0.7
         );
-        camera.lookAt(center);
-        controls.target.copy(center);
+        camera.lookAt(0, 0, 0);
+        controls.target.set(0, 0, 0);
 
-        ground.position.y = box.min.y - 0.01;
-        grid.position.y = box.min.y;
+        // Update ground plane
+        const grid = scene.children.find(
+          (c) => c instanceof THREE.GridHelper
+        ) as THREE.GridHelper | undefined;
+        if (grid) {
+          grid.position.y = 0;
+        }
+
+        const ground = scene.children.find(
+          (c) => c instanceof THREE.Mesh && c.geometry instanceof THREE.PlaneGeometry
+        ) as THREE.Mesh | undefined;
+        if (ground) {
+          ground.position.y = -0.01;
+        }
 
         controls.update();
       },
@@ -264,38 +371,7 @@ export default function ModelViewer({
         console.error("Error loading GLB model:", error);
       }
     );
-
-    // --- Animation loop ---
-    let animFrameId: number;
-    const animate = () => {
-      animFrameId = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    // --- Resize handler ---
-    const handleResize = () => {
-      if (!container) return;
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-    };
-    window.addEventListener("resize", handleResize);
-
-    // --- Cleanup ---
-    return () => {
-      cancelAnimationFrame(animFrameId);
-      window.removeEventListener("resize", handleResize);
-      renderer.domElement.removeEventListener("mousedown", onMouseDown);
-      renderer.domElement.removeEventListener("mouseup", onMouseUp);
-      controls.dispose();
-      renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
-      }
-    };
-  }, [modelUrl]);
+  }, [modelUrl]); // Reload only when modelUrl changes
 
   return (
     <div
