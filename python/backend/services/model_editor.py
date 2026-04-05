@@ -108,6 +108,7 @@ def add_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]
         if "color" in properties:
             new_element["color"] = properties["color"]
         
+        new_element["_edited"] = True
         model["elements"].append(new_element)
     
     return model
@@ -182,6 +183,7 @@ def update_property(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, 
             elem["properties"]["base"] = {}
         
         elem["properties"]["base"][prop_name] = prop_value
+        elem["_edited"] = True
     
     return model
 
@@ -223,6 +225,8 @@ def transform_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str
         
         if "scale" in action:
             elem["transform"]["scale"] = action["scale"]
+        
+        elem["_edited"] = True
     
     return model
 
@@ -269,6 +273,7 @@ def duplicate_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str
                 old_trans[2] + offset[2] * (i + 1),
             ]
         
+        new_elem["_edited"] = True
         model["elements"].append(new_elem)
     
     return model
@@ -300,6 +305,7 @@ def add_colour(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
     for elem in elements_to_update:
         # Store RGB (first 3 values)
         elem["color"] = color[:3] if len(color) >= 3 else color
+        elem["_edited"] = True
     
     return model
 

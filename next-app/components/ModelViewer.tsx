@@ -81,8 +81,8 @@ export default function ModelViewer({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Disable shadow maps to prevent WebGL2 Texture immutable crashes
+    renderer.shadowMap.enabled = false;
     container.appendChild(renderer.domElement);
 
     const resizeRenderer = () => {
@@ -102,9 +102,7 @@ export default function ModelViewer({
 
     const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
     mainLight.position.set(40, 80, 40);
-    mainLight.castShadow = true;
-    mainLight.shadow.mapSize.width = 2048;
-    mainLight.shadow.mapSize.height = 2048;
+    // Shadows disabled for main light
     scene.add(mainLight);
 
     const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.4);
@@ -124,7 +122,7 @@ export default function ModelViewer({
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.01;
-    ground.receiveShadow = true;
+    // Shadows disabled for ground plane
     scene.add(ground);
 
     // --- Grid ---
@@ -261,6 +259,11 @@ export default function ModelViewer({
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
+      // Reset ref so Fast Refresh can re-initialize properly
+      sceneRef.current.renderer = undefined as any;
+      sceneRef.current.scene = undefined as any;
+      sceneRef.current.camera = undefined as any;
+      sceneRef.current.controls = undefined as any;
     };
   }, []); // Empty dependency array - initialize only once
 
@@ -269,8 +272,19 @@ export default function ModelViewer({
     const { scene, camera, controls } = sceneRef.current;
     if (!scene || !camera || !controls) return;
 
-    // Remove old model if exists
+    // Remove old model if exists, disposing GPU resources
     if (sceneRef.current.modelRoot) {
+      sceneRef.current.modelRoot.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          mesh.geometry.dispose();
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((m) => m.dispose());
+          } else {
+            mesh.material.dispose();
+          }
+        }
+      });
       scene.remove(sceneRef.current.modelRoot);
       sceneRef.current.modelRoot = undefined;
     }
@@ -300,33 +314,37 @@ export default function ModelViewer({
         const framedBounds = new THREE.Box3().setFromObject(model);
         const framedCenter = framedBounds.getCenter(new THREE.Vector3());
         const framedSize = framedBounds.getSize(new THREE.Vector3());
-        model.position.sub(framedCenter);
+        
+        // Center X and Z, but place the BOTTOM of the model at Y=0 (the ground plane)
+        model.position.x -= framedCenter.x;
+        model.position.z -= framedCenter.z;
+        model.position.y -= framedBounds.min.y;
 
-        // Preserve original IFC colors
+        // Preserve original IFC colors and fix WebGL material sharing crashes
         model.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
+            mesh.castShadow = false;
+            mesh.receiveShadow = false;
 
-            const mat = mesh.material as THREE.MeshStandardMaterial;
+            // Clone the material to prevent WebGL texture corruption when mutating shared references
+            const mat = Array.isArray(mesh.material)
+              ? (mesh.material[0] as THREE.MeshStandardMaterial).clone()
+              : (mesh.material as THREE.MeshStandardMaterial).clone();
+              
             mat.side = THREE.DoubleSide;
 
             // Enable vertex colors if available
             if (mesh.geometry.attributes.color) {
               mat.vertexColors = true;
               mat.needsUpdate = true;
-            } else if (
-              mat.color.r === 1 &&
-              mat.color.g === 1 &&
-              mat.color.b === 1 &&
-              !mesh.geometry.attributes.color
-            ) {
-              // Apply neutral default
+            } else {
+              // Apply neutral default to elements lacking explicit colors
               mat.color = new THREE.Color(0xb0bcc8);
               mat.roughness = 0.55;
               mat.metalness = 0.15;
             }
+            mesh.material = mat;
           }
         });
 

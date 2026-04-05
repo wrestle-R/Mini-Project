@@ -108,8 +108,14 @@ def build_internal_model(ifc_path: str, project_id: str) -> Dict[str, Any]:
         # Get properties
         properties = _extract_properties(element)
         
-        # Get transform
-        transform = _extract_transform(element)
+        # Use identity transform: mesh geometry is already in world coords
+        # (ifcopenshell USE_WORLD_COORDS=True).  The transform field now
+        # exclusively represents user-driven modifications via the chatbot.
+        transform = {
+            "translation": [0.0, 0.0, 0.0],
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "scale": [1.0, 1.0, 1.0]
+        }
         
         # Get color if available
         color = _extract_color(element)
@@ -379,10 +385,18 @@ def _get_baseline(element) -> Tuple[List[float] | None, List[float] | None]:
         if not rel or not hasattr(rel, "Location") or not rel.Location:
             return None, None
 
-        origin = [float(v) for v in rel.Location.Coordinates[:3]]
+        # Safely handle 2D coordinates by padding with 0.0
+        raw_coords = list(rel.Location.Coordinates)
+        while len(raw_coords) < 3:
+            raw_coords.append(0.0)
+        origin = [float(v) for v in raw_coords[:3]]
+
         ref_dir = [1.0, 0.0, 0.0]
         if hasattr(rel, "RefDirection") and rel.RefDirection:
-            ref_dir = [float(v) for v in rel.RefDirection.DirectionRatios[:3]]
+            raw_dir = list(rel.RefDirection.DirectionRatios)
+            while len(raw_dir) < 3:
+                raw_dir.append(0.0)
+            ref_dir = [float(v) for v in raw_dir[:3]]
 
         # Use a default segment length; true wall length is typically geometry-derived.
         length = 1.0

@@ -34,23 +34,25 @@ def generate_glb_from_model(json_path: str, glb_path: str) -> str:
     
     # Process each element
     for element in model.get("elements", []):
-        geometry = element.get("geometry", {})
         mesh = _create_mesh_for_element(element)
         if mesh:
-            # IFC triangulated meshes are already exported in world coordinates.
-            # Parametric meshes are created in local space and need transforms.
-            if geometry.get("type") != "mesh":
-                transform = element.get("transform", {})
-                mesh = _apply_transform(mesh, transform)
+            # Always apply transform — identity for untouched elements,
+            # non-identity when the user has made chatbot edits.
+            transform = element.get("transform", {})
+            mesh = _apply_transform(mesh, transform)
             
-            # Apply color if available
+            # Apply color if available, with proper normalization
             if "color" in element:
-                color = element["color"]
+                color = _normalize_color(element["color"])
                 vertex_colors = np.tile(
-                    np.array(color + [255], dtype=np.uint8),
+                    np.array(color, dtype=np.uint8),
                     (len(mesh.vertices), 1)
                 )
                 cast(Any, mesh.visual).vertex_colors = vertex_colors
+            
+            # Subtle highlight tint for recently edited elements
+            if element.get("_edited"):
+                _apply_edit_highlight(mesh)
             
             # Set metadata
             mesh.metadata = {
@@ -59,7 +61,10 @@ def generate_glb_from_model(json_path: str, glb_path: str) -> str:
                 "element_name": element.get("name", "Unknown")
             }
             
-            scene.add_geometry(mesh)
+            # Use element ID as node/geom name so the Three.js frontend
+            # can match raycasted objects back to metadata entries.
+            element_id = element.get("id", f"elem_{added_meshes}")
+            scene.add_geometry(mesh, node_name=element_id, geom_name=element_id)
             added_meshes += 1
 
     if added_meshes == 0:
@@ -72,6 +77,60 @@ def generate_glb_from_model(json_path: str, glb_path: str) -> str:
     scene.export(glb_path, file_type="glb")
     
     return glb_path
+
+
+def _normalize_color(color: list) -> list:
+    """
+    Normalize a color list to [R, G, B, A] with values in 0-255 (uint8).
+    Accepts:
+      - [r, g, b] or [r, g, b, a] with values 0-1 (float) or 0-255 (int).
+    """
+    if not color:
+        return [200, 200, 200, 255]
+
+    # Detect float range (all components <= 1.0 and at least one is float)
+    is_float_range = all(isinstance(c, float) and c <= 1.0 for c in color)
+
+    if is_float_range:
+        rgba = [max(0, min(255, int(c * 255))) for c in color]
+    else:
+        rgba = [max(0, min(255, int(c))) for c in color]
+
+    # Pad to RGBA
+    while len(rgba) < 4:
+        rgba.append(255)
+    return rgba[:4]
+
+
+def _apply_edit_highlight(mesh: trimesh.Trimesh) -> None:
+    """
+    Apply a subtle tint to a mesh to indicate it was recently edited.
+    Shifts existing face colors slightly toward a soft blue tone.
+    """
+    try:
+        # Get current face colors (Nx4 uint8)
+        face_colors = mesh.visual.face_colors.copy()
+
+        # Blend toward a soft highlight color (light steel blue: 176, 196, 222)
+        highlight = np.array([176, 196, 222, 255], dtype=np.uint8)
+        blend_factor = 0.15  # very subtle
+
+        blended = (
+            face_colors.astype(np.float64) * (1 - blend_factor)
+            + highlight.astype(np.float64) * blend_factor
+        ).astype(np.uint8)
+        # Preserve original alpha
+        blended[:, 3] = face_colors[:, 3]
+
+        mesh.visual.face_colors = blended
+    except Exception:
+        # If the mesh has no face colors yet, assign a light tinted default
+        num_faces = len(mesh.faces)
+        tinted = np.tile(
+            np.array([190, 200, 215, 255], dtype=np.uint8),
+            (num_faces, 1),
+        )
+        mesh.visual.face_colors = tinted
 
 
 def _create_mesh_for_element(element: Dict[str, Any]) -> trimesh.Trimesh | None:
