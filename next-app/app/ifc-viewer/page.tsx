@@ -39,6 +39,8 @@ interface ChatMessage {
 export default function IFCViewerPage() {
   const showChat = true;
   const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const [originalModelUrl, setOriginalModelUrl] = useState<string | null>(null);
+  const [displayMode, setDisplayMode] = useState<"current" | "original" | "comparison">("current");
   const [metadataUrl, setMetadataUrl] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
@@ -68,6 +70,8 @@ export default function IFCViewerPage() {
     setStatus("uploading");
     setErrorMsg("");
     setModelUrl(null);
+    setOriginalModelUrl(null);
+    setDisplayMode("current");
     setMetadataUrl(null);
     setProjectId(null);
     setSelectedElement(null);
@@ -90,6 +94,7 @@ export default function IFCViewerPage() {
       const data = await res.json();
       setProjectId(data.project_id);
       setModelUrl(data.model_url);
+      setOriginalModelUrl(data.model_url);
       setMetadataUrl(data.metadata_url ?? null);
       setStatus("success");
     } catch (err: unknown) {
@@ -152,7 +157,7 @@ export default function IFCViewerPage() {
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_ai`,
         role: "assistant",
-        content: `Action: ${data.action.action}`,
+        content: data.message ?? `Action: ${data.action.action}`,
         timestamp: Date.now(),
         action: data.action,
       };
@@ -309,12 +314,36 @@ export default function IFCViewerPage() {
             }`}
           >
             {/* 3D Viewer */}
-            <Card className={`overflow-hidden ${showChat ? "lg:col-span-2" : "lg:col-span-1"}`}>
-              <CardContent className="p-0 h-full">
+            <Card className={`overflow-hidden flex flex-col ${showChat ? "lg:col-span-2" : "lg:col-span-1"}`}>
+              <CardHeader className="border-b py-3 px-4 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Model Viewer</CardTitle>
+                </div>
+                {originalModelUrl && modelUrl !== originalModelUrl && (
+                  <div className="flex gap-1 bg-muted p-1 rounded-md">
+                    {(["current", "comparison", "original"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setDisplayMode(mode)}
+                        className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+                          displayMode === mode
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-background/50"
+                        }`}
+                      >
+                        {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="p-0 flex-1 relative">
                 {modelUrl ? (
                   <div className="relative h-full">
                     <ModelViewer
                       modelUrl={modelUrl}
+                      originalModelUrl={originalModelUrl ?? undefined}
+                      displayMode={displayMode}
                       metadataUrl={metadataUrl ?? undefined}
                       onElementSelect={setSelectedElement}
                     />
@@ -584,6 +613,12 @@ export default function IFCViewerPage() {
                         )}
                       </button>
                     </div>
+                    {chatLoading && (
+                      <div className="flex items-center gap-2 text-xs text-primary animate-pulse py-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+                        Calculating architectural constraints...
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground text-center">
                       {!modelUrl
                         ? "Upload a model to chat"

@@ -14,6 +14,7 @@ Actions:
 import json
 import uuid
 from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from copy import deepcopy
 
 
@@ -22,7 +23,7 @@ class ModelEditorError(Exception):
     pass
 
 
-def execute_action(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def execute_action(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     Execute action on model.
     Modifies model in-place and returns it.
@@ -32,7 +33,7 @@ def execute_action(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, A
         action: Validated action dict from LLM
         
     Returns:
-        Modified model dict
+        Tuple of (Modified model dict, String message)
         
     Raises:
         ModelEditorError: If action cannot be executed
@@ -59,8 +60,7 @@ def execute_action(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, A
     except Exception as e:
         raise ModelEditorError(f"Error executing action: {str(e)}")
 
-
-def add_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def add_element(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     Add new element to model.
     
@@ -111,10 +111,10 @@ def add_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]
         new_element["_edited"] = True
         model["elements"].append(new_element)
     
-    return model
+    msg = f"Added {count} new {element_type} element(s)."
+    return model, msg
 
-
-def remove_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def remove_element(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     Remove element(s) from model.
     
@@ -140,10 +140,11 @@ def remove_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, A
     else:
         raise ModelEditorError("remove_element requires 'element_id' or 'target'")
     
-    return model
+    removed = initial_count - len(model["elements"])
+    msg = f"Removed {removed} {target or 'selected'} element(s)."
+    return model, msg
 
-
-def update_property(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def update_property(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     Update property on element(s).
     
@@ -173,7 +174,10 @@ def update_property(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, 
         # Update geometry
         if "geometry" in elem and elem["geometry"].get("type") == "parametric":
             if prop_name in ["height", "width", "depth", "thickness"]:
-                elem["geometry"][prop_name] = prop_value
+                actual_value = prop_value
+                if prop_name == "height":
+                    actual_value = _clip_height_to_bounds(model, elem, prop_value)
+                elem["geometry"][prop_name] = actual_value
         
         # Update properties
         if "properties" not in elem:
@@ -185,10 +189,13 @@ def update_property(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, 
         elem["properties"]["base"][prop_name] = prop_value
         elem["_edited"] = True
     
-    return model
+    msg = f"Updated {prop_name} to {prop_value} for {len(elements_to_update)} element(s)."
+    if prop_name == "height" and any(e["geometry"].get("height") != prop_value for e in elements_to_update if "geometry" in e):
+        msg += "\n\n⚠️ Some heights were clipped to respect connected roofs/slabs bounds."
+        
+    return model, msg
 
-
-def transform_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def transform_element(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     Transform element(s) (move, rotate, scale).
     
@@ -218,7 +225,11 @@ def transform_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str
             }
         
         if "translation" in action:
-            elem["transform"]["translation"] = action["translation"]
+            old_translation = elem["transform"].get("translation", [0, 0, 0])
+            new_translation = action["translation"]
+            delta = [new_translation[i] - old_translation[i] for i in range(3)]
+            elem["transform"]["translation"] = new_translation
+            _propagate_translation(model, elem["id"], delta)
         
         if "rotation" in action:
             elem["transform"]["rotation"] = action["rotation"]
@@ -228,10 +239,13 @@ def transform_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str
         
         elem["_edited"] = True
     
-    return model
+    msg = f"Transformed {len(elements_to_update)} element(s)."
+    if "translation" in action:
+        msg += "\n\n🔗 Dependent hosted elements were moved automatically."
+        
+    return model, msg
 
-
-def duplicate_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def duplicate_element(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     Duplicate element(s).
     
@@ -276,10 +290,10 @@ def duplicate_element(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str
         new_elem["_edited"] = True
         model["elements"].append(new_elem)
     
-    return model
+    msg = f"Duplicated element {count} time(s)."
+    return model, msg
 
-
-def add_colour(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def add_colour(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     Add or update color on element(s).
     
@@ -307,8 +321,8 @@ def add_colour(model: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
         elem["color"] = color[:3] if len(color) >= 3 else color
         elem["_edited"] = True
     
-    return model
-
+    msg = f"Applied custom color to {len(elements_to_update)} element(s)."
+    return model, msg
 
 def validate_model(model: Dict[str, Any]) -> None:
     """
@@ -348,3 +362,60 @@ def validate_model(model: Dict[str, Any]) -> None:
         
         if "transform" not in elem:
             raise ModelEditorError(f"Element {elem_id} missing 'transform'")
+
+def _propagate_translation(model: Dict[str, Any], host_id: str, delta: List[float]) -> None:
+    """Propagate translation delta to elements hosted by or contained in the host_id."""
+    relationships = model.get("relationships", {})
+    if not relationships:
+        return
+        
+    hosted_ids = relationships.get("contains", {}).get(host_id, [])
+    contained_ids = relationships.get("contains_spatial", {}).get(host_id, [])
+    
+    # Elements to move along with the host
+    dependent_ids = set(hosted_ids) | set(contained_ids)
+    
+    for elem in model.get("elements", []):
+        if elem["id"] in dependent_ids:
+            trans = elem.get("transform", {}).get("translation", [0, 0, 0])
+            elem["transform"]["translation"] = [
+                trans[0] + delta[0],
+                trans[1] + delta[1],
+                trans[2] + delta[2]
+            ]
+            elem["_edited"] = True
+            # Recursively propagate
+            _propagate_translation(model, elem["id"], delta)
+
+def _clip_height_to_bounds(model: Dict[str, Any], elem: Dict[str, Any], target_height: float) -> float:
+    """Clip target height to not exceed bounds of elements above it, e.g., roofs/slabs."""
+    relationships = model.get("relationships", {})
+    if not relationships:
+        return target_height
+        
+    bounded_by_ids = relationships.get("bounded_by", {}).get(elem["id"], [])
+    if not bounded_by_ids:
+        return target_height
+        
+    # We find bounding elements that are "above" the current element.
+    # To keep this resilient without heavy bounding-box intersection, 
+    # we just look for roofs or slabs in the bounded list that are above the element's start Z.
+    
+    element_z = elem.get("transform", {}).get("translation", [0, 0, 0])[2]
+    
+    max_allowed_height = target_height
+    for bound_elem in model.get("elements", []):
+        if bound_elem["id"] in bounded_by_ids:
+            if bound_elem["type"] in ["roof", "slab"]:
+                bound_z = bound_elem.get("transform", {}).get("translation", [0, 0, 0])[2]
+                bound_geom = bound_elem.get("geometry", {})
+                # If bound is mesh, we would need BB. For parametric, we check its base Z.
+                # Just estimating the delta Z.
+                if bound_z > element_z:
+                    available_height = bound_z - element_z
+                    # If this roof/slab acts as a cap, we constrain height
+                    if available_height < max_allowed_height and available_height > 0:
+                        max_allowed_height = available_height
+                        
+    return max_allowed_height
+

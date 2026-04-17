@@ -340,7 +340,7 @@ async def chat_with_model(project_id: str, message: str = Form(...)):
             model = json.load(f)
         
         # Step 3: Execute action on model
-        modified_model = execute_action(model, action)
+        modified_model, action_msg = execute_action(model, action)
         
         # Step 4: Validate modified model
         validate_model(modified_model)
@@ -373,7 +373,7 @@ async def chat_with_model(project_id: str, message: str = Form(...)):
             "status": "success",
             "action": action,
             "model_url": f"/data/glb/{project_id}.glb",
-            "message": f"Action '{action.get('action')}' executed successfully"
+            "message": action_msg
         })
     
     except ActionValidationError as e:

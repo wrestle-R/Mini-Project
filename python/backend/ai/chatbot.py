@@ -124,7 +124,7 @@ class ArchitecturalChatbot:
         Raises:
             ActionValidationError: If action fails validation
         """
-        template_str = """You are an architectural assistant. Convert the user's natural language instruction into a JSON action.
+        template_str = """You are an architectural assistant. Convert the user's natural language instruction into EXACTLY ONE JSON action object.
 
 SUPPORTED ACTIONS:
 1. add_element: Create new element
@@ -150,12 +150,13 @@ ELEMENT TYPES: wall, column, slab, door, window, beam, roof, space, stair, membe
 Rules:
 - If instruction targets a TYPE (e.g., "all walls"), use "target": "type_name"
 - If instruction targets SINGLE element, use "element_id"
-- Always respond with valid JSON only
+- If user instruction implies multiple actions, pick the PRIMARY or FIRST executable action.
+- Always respond with exactly ONE valid JSON object only. Do NOT return multiple objects, arrays, or text.
 - Include "reason" field explaining the action
 
 User instruction: {instruction}
 
-Respond ONLY with JSON (no markdown, no explanation)."""
+Respond ONLY with a single JSON object. No explanation, no markdown."""
         
         prompt = ChatPromptTemplate.from_template(template_str)
         chain = prompt | self.llm
@@ -180,11 +181,17 @@ Respond ONLY with JSON (no markdown, no explanation)."""
             if response_text.endswith("```"):
                 response_text = response_text[:-3]
 
-            response_text = response_text.strip()
             try:
-                return json.loads(response_text)
+                # If there are multiple objects or trailing text, raw_decode extracts the first valid JSON
+                decoder = json.JSONDecoder()
+                # Find start of JSON object to avoid leading text
+                start_idx = response_text.find('{')
+                if start_idx == -1:
+                    raise ActionValidationError("No JSON object found in response.")
+                parsed, _ = decoder.raw_decode(response_text[start_idx:])
+                return parsed
             except json.JSONDecodeError as e:
-                raise ActionValidationError(f"Failed to parse LLM response as JSON: {e}")
+                raise ActionValidationError(f"Failed to parse LLM response as JSON: {e}\nRaw: {response_text}")
 
         action_dict = _invoke_and_parse(message)
         action_value = str(action_dict.get("action", "")).strip().lower()

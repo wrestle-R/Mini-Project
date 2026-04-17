@@ -83,7 +83,14 @@ def build_internal_model(ifc_path: str, project_id: str) -> Dict[str, Any]:
     
     model = {
         "project_id": project_id,
-        "elements": []
+        "elements": [],
+        "relationships": {
+            "hosted_by": {},
+            "contains": {},
+            "bounded_by": {},
+            "contained_in": {},
+            "contains_spatial": {}
+        }
     }
     
     # Get all geometry elements
@@ -134,7 +141,73 @@ def build_internal_model(ifc_path: str, project_id: str) -> Dict[str, Any]:
         
         model["elements"].append(model_element)
     
+    # Extract topological and spatial relationships
+    _extract_relationships(ifc_file, model)
+    
     return model
+
+def _extract_relationships(ifc_file, model: Dict[str, Any]) -> None:
+    """Extract semantic relationships between elements."""
+    relationships = model["relationships"]
+    valid_ids = {e["id"] for e in model["elements"]}
+    
+    # 1. Hosted by (IfcRelFillsElement) -> e.g. Window hosted by Wall
+    for rel in ifc_file.by_type("IfcRelFillsElement"):
+        try:
+            opening = rel.RelatingOpeningElement
+            element = rel.RelatedBuildingElement
+            if not opening or not element: continue
+            
+            # Find what the opening voids
+            for void_rel in getattr(opening, "VoidsElements", []):
+                if void_rel.is_a("IfcRelVoidsElement"):
+                    host = void_rel.RelatingBuildingElement
+                    if host and element.GlobalId in valid_ids and host.GlobalId in valid_ids:
+                        relationships["hosted_by"][element.GlobalId] = host.GlobalId
+                        if host.GlobalId not in relationships["contains"]:
+                            relationships["contains"][host.GlobalId] = []
+                        relationships["contains"][host.GlobalId].append(element.GlobalId)
+        except Exception as e:
+            print(f"Error extracting fills relationship: {e}")
+
+    # 2. Bounded by / Connected to (IfcRelConnectsElements)
+    for rel in ifc_file.by_type("IfcRelConnectsElements"):
+        try:
+            el1 = rel.RelatingElement
+            el2 = rel.RelatedElement
+            if not el1 or not el2: continue
+            
+            id1, id2 = el1.GlobalId, el2.GlobalId
+            if id1 in valid_ids and id2 in valid_ids:
+                if id1 not in relationships["bounded_by"]:
+                    relationships["bounded_by"][id1] = []
+                if id2 not in relationships["bounded_by"]:
+                    relationships["bounded_by"][id2] = []
+                if id2 not in relationships["bounded_by"][id1]:
+                    relationships["bounded_by"][id1].append(id2)
+                if id1 not in relationships["bounded_by"][id2]:
+                    relationships["bounded_by"][id2].append(id1)
+        except Exception as e:
+            print(f"Error extracting connects relationship: {e}")
+
+    # 3. Contained in (IfcRelContainedInSpatialStructure)
+    for rel in ifc_file.by_type("IfcRelContainedInSpatialStructure"):
+        try:
+            structure = rel.RelatingStructure
+            elements = rel.RelatedElements
+            if not structure or not elements: continue
+            
+            struct_id = structure.GlobalId
+            if struct_id not in relationships["contains_spatial"]:
+                relationships["contains_spatial"][struct_id] = []
+                
+            for el in elements:
+                el_id = el.GlobalId
+                if el_id in valid_ids:
+                    relationships["contained_in"][el_id] = struct_id
+                    relationships["contains_spatial"][struct_id].append(el_id)
+        except Exception as e:
+            print(f"Error extracting spatial relationship: {e}")
 
 
 def _extract_geometry(element) -> Dict[str, Any] | None:

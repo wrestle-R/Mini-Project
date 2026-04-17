@@ -16,12 +16,16 @@ export interface ElementMetadata {
 
 interface ModelViewerProps {
   modelUrl: string;
+  originalModelUrl?: string;
+  displayMode?: "current" | "original" | "comparison";
   metadataUrl?: string;
   onElementSelect?: (element: ElementMetadata | null) => void;
 }
 
 export default function ModelViewer({
   modelUrl,
+  originalModelUrl,
+  displayMode = "current",
   metadataUrl,
   onElementSelect,
 }: ModelViewerProps) {
@@ -38,6 +42,7 @@ export default function ModelViewer({
     controls?: OrbitControls;
     animFrameId?: number;
     modelRoot?: THREE.Object3D;
+    originalModelRoot?: THREE.Object3D;
   }>({});
 
   // Fetch metadata when URL changes
@@ -267,14 +272,14 @@ export default function ModelViewer({
     };
   }, []); // Empty dependency array - initialize only once
 
-  // Load/reload model when URL changes
-  useEffect(() => {
+  const loadModelToScene = (url: string, isOriginal: boolean) => {
     const { scene, camera, controls } = sceneRef.current;
     if (!scene || !camera || !controls) return;
 
-    // Remove old model if exists, disposing GPU resources
-    if (sceneRef.current.modelRoot) {
-      sceneRef.current.modelRoot.traverse((child) => {
+    // Remove old model if exists
+    const existingModelRoot = isOriginal ? sceneRef.current.originalModelRoot : sceneRef.current.modelRoot;
+    if (existingModelRoot) {
+      existingModelRoot.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
           const mesh = child as THREE.Mesh;
           mesh.geometry.dispose();
@@ -285,20 +290,28 @@ export default function ModelViewer({
           }
         }
       });
-      scene.remove(sceneRef.current.modelRoot);
-      sceneRef.current.modelRoot = undefined;
+      scene.remove(existingModelRoot);
+      if (isOriginal) {
+        sceneRef.current.originalModelRoot = undefined;
+      } else {
+        sceneRef.current.modelRoot = undefined;
+      }
     }
 
     const loader = new GLTFLoader();
-    const fullUrl = modelUrl.startsWith("http")
-      ? modelUrl
-      : `http://localhost:8000${modelUrl}`;
+    const fullUrl = url.startsWith("http")
+      ? url
+      : `http://localhost:8000${url}`;
 
     loader.load(
       fullUrl,
       (gltf) => {
         const model = gltf.scene;
-        sceneRef.current.modelRoot = model;
+        if (isOriginal) {
+          sceneRef.current.originalModelRoot = model;
+        } else {
+          sceneRef.current.modelRoot = model;
+        }
 
         // Normalize model to scene origin before and after the axis adjustment.
         // Some GLB exports shift their center when rotated, so we frame again after
@@ -344,28 +357,35 @@ export default function ModelViewer({
               mat.roughness = 0.55;
               mat.metalness = 0.15;
             }
+            // Save the original material for toggling modes
+            mesh.userData.originalMaterial = mat;
             mesh.material = mat;
           }
         });
 
         scene.add(model);
 
-        // Fit camera to model bounds
-        const maxDim = Math.max(framedSize.x, framedSize.y, framedSize.z);
-        const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0.01 ? maxDim : 10;
-        const fov = camera.fov * (Math.PI / 180);
-        const distance = Math.max(
-          (safeMaxDim / (2 * Math.tan(fov / 2))) * 1.3,
-          12
-        );
+        // Fit camera to model bounds if loading the current model
+        if (!isOriginal) {
+          const maxDim = Math.max(framedSize.x, framedSize.y, framedSize.z);
+          const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0.01 ? maxDim : 10;
+          const fov = camera.fov * (Math.PI / 180);
+          const distance = Math.max(
+            (safeMaxDim / (2 * Math.tan(fov / 2))) * 1.3,
+            12
+          );
 
-        camera.position.set(
-          distance * 0.7,
-          distance * 0.5,
-          distance * 0.7
-        );
-        camera.lookAt(0, 0, 0);
-        controls.target.set(0, 0, 0);
+          // Only set camera pos if original isn't already loaded and framed
+          if (!sceneRef.current.originalModelRoot) {
+            camera.position.set(
+              distance * 0.7,
+              distance * 0.5,
+              distance * 0.7
+            );
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+          }
+        }
 
         // Update ground plane
         const grid = scene.children.find(
@@ -383,13 +403,78 @@ export default function ModelViewer({
         }
 
         controls.update();
+
+        // Apply display mode constraints
+        applyDisplayMode(displayMode, sceneRef.current.modelRoot, sceneRef.current.originalModelRoot);
+        
       },
       undefined,
       (error) => {
-        console.error("Error loading GLB model:", error);
+        console.error(`Error loading GLB model (${fullUrl}):`, error);
       }
     );
-  }, [modelUrl]); // Reload only when modelUrl changes
+  };
+
+  // Load current model
+  useEffect(() => {
+    loadModelToScene(modelUrl, false);
+  }, [modelUrl]);
+
+  // Load original model
+  useEffect(() => {
+    if (originalModelUrl) {
+      loadModelToScene(originalModelUrl, true);
+    } else {
+      if (sceneRef.current.originalModelRoot && sceneRef.current.scene) {
+        sceneRef.current.scene.remove(sceneRef.current.originalModelRoot);
+        sceneRef.current.originalModelRoot = undefined;
+      }
+    }
+  }, [originalModelUrl]);
+
+  // Apply display mode
+  useEffect(() => {
+    applyDisplayMode(displayMode, sceneRef.current.modelRoot, sceneRef.current.originalModelRoot);
+  }, [displayMode]);
+
+  const applyDisplayMode = (
+    mode: "current" | "original" | "comparison",
+    currentRoot?: THREE.Object3D,
+    originalRoot?: THREE.Object3D
+  ) => {
+    if (currentRoot) {
+      currentRoot.visible = mode === "current" || mode === "comparison";
+    }
+
+    if (originalRoot) {
+      originalRoot.visible = mode === "original" || mode === "comparison";
+      
+      originalRoot.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          if (mode === "comparison") {
+            // Apply ghost material
+            if (!mesh.userData.ghostMaterial) {
+              const ghostMat = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                transparent: true,
+                opacity: 0.15,
+                wireframe: true,
+                depthWrite: false,
+              });
+              mesh.userData.ghostMaterial = ghostMat;
+            }
+            mesh.material = mesh.userData.ghostMaterial;
+          } else {
+            // Restore original
+            if (mesh.userData.originalMaterial) {
+              mesh.material = mesh.userData.originalMaterial;
+            }
+          }
+        }
+      });
+    }
+  };
 
   return (
     <div
