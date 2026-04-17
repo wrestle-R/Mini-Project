@@ -42,7 +42,7 @@ export default function Stats() {
                         <div
                             key={i}
                             className="after:h-(--line-height) after:bg-foreground/15 hover:after:bg-primary relative h-full w-px rounded-full duration-200 before:absolute before:inset-0 before:-inset-x-6 after:absolute after:inset-0 after:mt-auto hover:mx-2"
-                            style={{ '--line-height': `${height * 100}%` } as CSSProperties}
+                            style={{ '--line-height': `${(height * 100).toFixed(2)}%` } as CSSProperties}
                         />
                     )
                 })}

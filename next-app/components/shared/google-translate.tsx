@@ -161,7 +161,7 @@ export function GoogleTranslateProvider() {
     loadGoogleTranslateScript();
   }, []);
 
-  return <div id="google_translate_element" style={{ display: "none" }} />;
+  return <div id="google_translate_element" style={{ display: "none" }} suppressHydrationWarning />;
 }
 
 export function GoogleTranslateLanguageSelector({

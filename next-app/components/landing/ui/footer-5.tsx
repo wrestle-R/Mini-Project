@@ -1,3 +1,4 @@
+import React from 'react'
 import Link from 'next/link'
 
 const links = [
@@ -10,6 +11,11 @@ const links = [
 ]
 
 export default function Footer() {
+    const [mounted, setMounted] = React.useState(false)
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
     return (
         <footer className="bg-background border-t border-border @container py-12">
             <div className="mx-auto max-w-5xl px-6">
@@ -33,7 +39,9 @@ export default function Footer() {
                         ))}
                     </nav>
 
-                    <p className="text-muted-foreground mt-2 border-t pt-6 text-sm">&copy; {new Date().getFullYear()} BuildSync. All rights reserved.</p>
+                    <p className="text-muted-foreground mt-2 border-t pt-6 text-sm">
+                        &copy; {mounted ? new Date().getFullYear() : 2026} BuildSync. All rights reserved.
+                    </p>
                 </div>
             </div>
         </footer>
