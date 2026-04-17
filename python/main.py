@@ -11,6 +11,7 @@ import os
 import shutil
 import uuid
 import json
+from typing import Optional, List
 
 # IFC Processing Pipeline
 from backend.services.model_builder import build_internal_model
@@ -307,7 +308,11 @@ async def upload_ifc(file: UploadFile = File(...)):
 
 
 @app.post("/api/chat/{project_id}")
-async def chat_with_model(project_id: str, message: str = Form(...)):
+async def chat_with_model(
+    project_id: str, 
+    message: str = Form(...),
+    selected_contexts: Optional[str] = Form(None)
+):
     """
     Process natural language instruction and update model.
     
@@ -328,8 +333,17 @@ async def chat_with_model(project_id: str, message: str = Form(...)):
                 "reply": "Hello. I can help edit the IFC model. Try commands like 'make all walls taller' or 'change the slab color to gray'."
             })
 
-        # Step 1: Parse instruction with LLM
-        action = parse_instruction(message)
+        # Step 1: Parse contexts if provided
+        contexts = None
+        if selected_contexts:
+            try:
+                contexts = json.loads(selected_contexts)
+            except:
+                pass
+                
+        # Parse instruction with LLM
+        response_data = parse_instruction(message, contexts)
+        actions_to_execute = response_data.get("actions", [])
         
         # Step 2: Load JSON model
         json_path = os.path.join("data/models", f"{project_id}.json")
@@ -339,8 +353,12 @@ async def chat_with_model(project_id: str, message: str = Form(...)):
         with open(json_path, 'r') as f:
             model = json.load(f)
         
-        # Step 3: Execute action on model
-        modified_model, action_msg = execute_action(model, action)
+        # Step 3: Execute actions on model sequentially
+        modified_model = model
+        merged_msgs = []
+        for action in actions_to_execute:
+            modified_model, action_msg = execute_action(modified_model, action)
+            merged_msgs.append(action_msg)
         
         # Step 4: Validate modified model
         validate_model(modified_model)
@@ -371,9 +389,11 @@ async def chat_with_model(project_id: str, message: str = Form(...)):
         
         return JSONResponse(content={
             "status": "success",
-            "action": action,
+            "actions": actions_to_execute,
+            "plan": response_data.get("plan", []),
+            "explanation": response_data.get("explanation", "Changes applied successfully."),
             "model_url": f"/data/glb/{project_id}.glb",
-            "message": action_msg
+            "message": "\n".join(merged_msgs)
         })
     
     except ActionValidationError as e:

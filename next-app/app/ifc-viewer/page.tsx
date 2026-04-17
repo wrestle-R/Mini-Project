@@ -31,8 +31,10 @@ interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
+  explanation?: string;
+  plan?: string[];
+  actions?: Record<string, unknown>[];
   timestamp: number;
-  action?: Record<string, unknown>;
   error?: string;
 }
 
@@ -48,6 +50,7 @@ export default function IFCViewerPage() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [selectedElement, setSelectedElement] =
     useState<ElementMetadata | null>(null);
+  const [pinnedContexts, setPinnedContexts] = useState<ElementMetadata[]>([]);
   
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -75,6 +78,7 @@ export default function IFCViewerPage() {
     setMetadataUrl(null);
     setProjectId(null);
     setSelectedElement(null);
+    setPinnedContexts([]);
     setMessages([]);
 
     const formData = new FormData();
@@ -105,7 +109,15 @@ export default function IFCViewerPage() {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      const scrollContainer = messagesEndRef.current.parentElement;
+      if (scrollContainer) {
+        // Use requestAnimationFrame to ensure the DOM has updated
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        });
+      }
+    }
   }, [messages]);
 
   const handleSendMessage = async () => {
@@ -126,6 +138,19 @@ export default function IFCViewerPage() {
     try {
       const formData = new FormData();
       formData.append("message", userMessage.content);
+      
+      const allContexts = [...pinnedContexts];
+      if (selectedElement && !allContexts.some(c => c.globalId === selectedElement.globalId)) {
+        allContexts.push(selectedElement);
+      }
+      
+      if (allContexts.length > 0) {
+        const mappedContexts = allContexts.map(c => ({
+          element_id: c.globalId,
+          element_type: c.type || "element"
+        }));
+        formData.append("selected_contexts", JSON.stringify(mappedContexts));
+      }
 
       const res = await fetch(`http://localhost:8000/api/chat/${projectId}`, {
         method: "POST",
@@ -157,9 +182,11 @@ export default function IFCViewerPage() {
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_ai`,
         role: "assistant",
-        content: data.message ?? `Action: ${data.action.action}`,
+        content: data.explanation || data.message || "Changes applied.",
+        explanation: data.explanation,
+        plan: data.plan,
+        actions: data.actions || (data.action ? [data.action] : undefined),
         timestamp: Date.now(),
-        action: data.action,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -309,12 +336,12 @@ export default function IFCViewerPage() {
           transition={{ duration: 0.35, delay: 0.16 }}
         >
           <div
-            className={`grid grid-cols-1 gap-4 h-[70vh] min-h-[600px] ${
+            className={`grid grid-cols-1 gap-4 h-[calc(100vh-250px)] min-h-[600px] ${
               showChat ? "lg:grid-cols-3" : "lg:grid-cols-1"
             }`}
           >
             {/* 3D Viewer */}
-            <Card className={`overflow-hidden flex flex-col ${showChat ? "lg:col-span-2" : "lg:col-span-1"}`}>
+            <Card className={`overflow-hidden flex flex-col h-full ${showChat ? "lg:col-span-2" : "lg:col-span-1"}`}>
               <CardHeader className="border-b py-3 px-4 flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-base">Model Viewer</CardTitle>
@@ -489,7 +516,7 @@ export default function IFCViewerPage() {
             </Card>
 
             {showChat ? (
-              <Card className="overflow-hidden flex flex-col">
+              <Card className="overflow-hidden flex flex-col h-full">
                 <CardHeader className="border-b">
                   <CardTitle className="text-lg">Architectural Assistant</CardTitle>
                   <CardDescription className="text-xs">
@@ -534,29 +561,38 @@ export default function IFCViewerPage() {
                             }`}
                           >
                             <div
-                              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                              className={`max-w-[90%] rounded-lg px-3 py-2 text-sm shadow-sm transition-all ${
                                 msg.role === "user"
                                   ? "bg-primary text-primary-foreground"
                                   : msg.error
                                   ? "bg-destructive/10 text-destructive border border-destructive/20"
-                                  : "bg-secondary text-secondary-foreground"
-                              }`}
+                                  : "bg-secondary text-secondary-foreground border border-border/50"
+                              } ${msg.role === "assistant" ? "max-h-[450px] overflow-y-auto" : ""}`}
                             >
-                              <p className="text-xs leading-relaxed">
+                              <p className="text-xs leading-relaxed font-medium">
                                 {msg.content}
                               </p>
-                              {msg.action && (
-                                <div className="mt-2 pt-2 border-t border-current border-opacity-20">
-                                  <p className="text-xs font-mono opacity-75 break-words whitespace-pre-wrap">
-                                    {JSON.stringify(msg.action, null, 2).substring(
-                                      0,
-                                      120
-                                    )}
-                                    {JSON.stringify(msg.action).length > 120
-                                      ? "..."
-                                      : ""}
-                                  </p>
+                              {msg.plan && msg.plan.length > 0 && (
+                                <div className="mt-3 text-xs space-y-1.5 bg-background/40 p-2.5 rounded-md border border-border/50">
+                                  <p className="opacity-60 uppercase text-[9px] font-bold tracking-wider mb-1">Execution Plan</p>
+                                  {msg.plan.map((step, idx) => (
+                                    <div key={idx} className="flex gap-2 items-start">
+                                      <span className="text-primary font-bold mt-0.5 shrink-0">✓</span>
+                                      <span className="opacity-90">{step}</span>
+                                    </div>
+                                  ))}
                                 </div>
+                              )}
+                              {msg.actions && msg.actions.length > 0 && (
+                                <details className="mt-3 pt-2 text-[10px] text-muted-foreground border-t border-current border-opacity-10 group">
+                                  <summary className="cursor-pointer hover:text-foreground font-medium select-none flex items-center gap-1 transition-colors">
+                                    <svg className="w-3 h-3 transition-transform group-open:rotate-90" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                    View Technical Logs
+                                  </summary>
+                                  <pre className="mt-2 p-2 bg-background/50 rounded font-mono break-words whitespace-pre-wrap opacity-75 max-h-40 overflow-y-auto">
+                                    {JSON.stringify(msg.actions, null, 2)}
+                                  </pre>
+                                </details>
                               )}
                               {msg.error && (
                                 <p className="text-xs mt-1 opacity-75">
@@ -572,7 +608,66 @@ export default function IFCViewerPage() {
                   </div>
 
                   {/* Input area */}
-                  <div className="border-t p-3 space-y-2">
+                  <div className="border-t p-3 space-y-2 bg-background relative">
+                    {/* Context Chips Overlay */}
+                    <AnimatePresence>
+                      {(() => {
+                        const displayContexts = [...pinnedContexts];
+                        if (selectedElement && !displayContexts.some(c => c.globalId === selectedElement.globalId)) {
+                          displayContexts.push(selectedElement);
+                        }
+                        return displayContexts.length > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                            className="absolute -top-12 left-3 right-3 flex flex-wrap gap-2 pointer-events-none"
+                          >
+                            {displayContexts.map(c => {
+                              const isPinned = pinnedContexts.some(p => p.globalId === c.globalId);
+                              return (
+                                <div key={c.globalId} className="pointer-events-auto flex items-center gap-1.5 bg-primary/10 border border-primary/20 text-primary-foreground px-2 py-1 rounded max-w-[150px] shadow-sm backdrop-blur-md">
+                                  <span className="shrink-0 bg-primary/20 text-primary px-1 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider">
+                                    {c.type}
+                                  </span>
+                                  <span className="text-[10px] font-medium truncate text-foreground/80" title={c.name || c.globalId}>
+                                    {c.name || c.globalId}
+                                  </span>
+                                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                                    <button
+                                      onClick={() => {
+                                        if (isPinned) {
+                                          setPinnedContexts(prev => prev.filter(p => p.globalId !== c.globalId));
+                                        } else {
+                                          if (pinnedContexts.length < 5) {
+                                            setPinnedContexts(prev => [...prev, c]);
+                                          }
+                                        }
+                                      }}
+                                      className={`p-0.5 rounded transition-colors ${isPinned ? 'text-primary hover:bg-primary/20' : 'text-foreground/40 hover:text-foreground/80 hover:bg-foreground/10'}`}
+                                      title={isPinned ? "Unpin context" : "Pin context"}
+                                    >
+                                      {/* Pin Icon */}
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.68V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3v4.68a2 2 0 0 1-1.11 1.87l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+                                    </button>
+                                    {!isPinned && (
+                                      <button
+                                        onClick={() => setSelectedElement(null)}
+                                        className="p-0.5 rounded text-foreground/40 hover:text-foreground/80 hover:bg-foreground/10 transition-colors"
+                                        title="Clear selection"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </motion.div>
+                        );
+                      })()}
+                    </AnimatePresence>
+
                     {chatError && (
                       <p className="text-xs text-destructive bg-destructive/10 rounded p-2">
                         {chatError}

@@ -201,7 +201,8 @@ def transform_element(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Di
     
     Expected action fields:
     - element_id or target: which element(s)
-    - translation: [x, y, z] (optional)
+    - translation: [x, y, z] target position (absolute, optional)
+    - translation_relative: [dx, dy, dz] move distance (relative, optional)
     - rotation: [x, y, z, w] quaternion (optional)
     - scale: [sx, sy, sz] (optional)
     """
@@ -230,6 +231,13 @@ def transform_element(model: Dict[str, Any], action: Dict[str, Any]) -> Tuple[Di
             delta = [new_translation[i] - old_translation[i] for i in range(3)]
             elem["transform"]["translation"] = new_translation
             _propagate_translation(model, elem["id"], delta)
+            
+        if "translation_relative" in action:
+            rel_move = action["translation_relative"]
+            current_translation = elem["transform"].get("translation", [0, 0, 0])
+            new_translation = [current_translation[i] + rel_move[i] for i in range(3)]
+            elem["transform"]["translation"] = new_translation
+            _propagate_translation(model, elem["id"], rel_move)
         
         if "rotation" in action:
             elem["transform"]["rotation"] = action["rotation"]

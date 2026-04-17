@@ -17,7 +17,7 @@ Target Handling:
 
 import os
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
@@ -111,12 +111,13 @@ class ArchitecturalChatbot:
             temperature=temperature
         )
     
-    def parse_instruction(self, message: str) -> Dict[str, Any]:
+    def parse_instruction(self, message: str, contexts: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
         Parse natural language instruction to JSON action.
         
         Args:
             message: User instruction (e.g., "Make all walls 4 meters tall")
+            contexts: Optional list of dicts with selected element context e.g. [{"element_id": "...", "element_type": "..."}]
             
         Returns:
             Validated action dictionary
@@ -124,45 +125,69 @@ class ArchitecturalChatbot:
         Raises:
             ActionValidationError: If action fails validation
         """
-        template_str = """You are an architectural assistant. Convert the user's natural language instruction into EXACTLY ONE JSON action object.
+        template_str = """You are an expert agentic architectural assistant. Create a precise plan and execute modifications.
+Convert natural language into EXACTLY ONE JSON object matching the SCHEMA.
+
+SPATIAL ORIENTATION GUIDE (WORLD COORDINATES):
+- +X: RIGHT (e.g., "move right")
+- -X: LEFT (e.g., "move left")
+- +Y: FRONT / FORWARD (e.g., "move forward")
+- -Y: BACK / AWAY (e.g., "move back")
+- +Z: UP (e.g., "lift up", "move higher")
+- -Z: DOWN (e.g., "move lower")
+
+ACTION PRIORITIES:
+1. GEOMETRY: If asked to "extend" or "lengthen", prioritize `update_property` on "width" or "depth".
+2. RELATIVE MOVEMENT: If the user says "more", "further", "additional", "another X meters", you MUST use `translation_relative` ([dx, dy, dz]). 
+   - Example: "move left 50m more" -> {{"action": "transform_element", "translation_relative": [-50, 0, 0]}}
+3. ABSOLUTE MOVEMENT: If user says "move to [coord]" or "set position to", use `translation` ([x, y, z]).
 
 SUPPORTED ACTIONS:
-1. add_element: Create new element
-   {{"action": "add_element", "element_type": "wall|column|slab|...", "properties": {{...}}, "target": optional_type}}
-
-2. remove_element: Delete element
-   {{"action": "remove_element", "element_id": "ID" OR "target": "element_type"}}
-
-3. update_property: Modify element property
-   {{"action": "update_property", "property": "height|width|depth|thickness|material|color", "value": number_or_string, "element_id": "ID" OR "target": "element_type"}}
-
-4. transform_element: Move, rotate, or scale
-   {{"action": "transform_element", "element_id": "ID" OR "target": "element_type", "translation": [x,y,z] OR "rotation": [x,y,z,w] OR "scale": [sx,sy,sz]}}
-
-5. duplicate_element: Clone element
-   {{"action": "duplicate_element", "element_id": "ID", "count": number}}
-
-6. add_colour: Set element color
-   {{"action": "add_colour", "element_id": "ID" OR "target": "element_type", "color": [r,g,b]}}
-
-ELEMENT TYPES: wall, column, slab, door, window, beam, roof, space, stair, member
+1. add_element / 2. remove_element
+3. update_property: Parametric resizing (height, width, depth, thickness) or material/color.
+4. transform_element: 
+    - Use "translation" for absolute targets.
+    - Use "translation_relative" ([dx, dy, dz]) for relative shifts.
+    - Use "scale": [sx, sy, sz] for uniform/non-uniform growth.
+5. duplicate_element / 6. add_colour
 
 Rules:
-- If instruction targets a TYPE (e.g., "all walls"), use "target": "type_name"
-- If instruction targets SINGLE element, use "element_id"
-- If user instruction implies multiple actions, pick the PRIMARY or FIRST executable action.
-- Always respond with exactly ONE valid JSON object only. Do NOT return multiple objects, arrays, or text.
-- Include "reason" field explaining the action
+- Target "this", "it", or "that" using the first GlobalID in CONTEXT PINS.
+- Respond with exactly ONE JSON object.
 
-User instruction: {instruction}
+SCHEMA:
+{{
+  "explanation": "concise description of work",
+  "plan": ["step 1", "step 2"],
+  "actions": [{{ "action": "...", ... }}]
+}}
 
-Respond ONLY with a single JSON object. No explanation, no markdown."""
+EXAMPLES:
+- "move it 10m more to the right" -> {{"translation_relative": [10, 0, 0]}}
+- "extend the wall depth by 5 meters" -> {{"action": "update_property", "property": "depth", "value": 5}}
+- "lift the roof up 2.5m" -> {{"translation_relative": [0, 0, 2.5]}}
+- "shift everything 2m back" -> {{"target": "wall", "translation_relative": [0, -2, 0]}}
+
+{context_block}
+
+User Instruction: {instruction}
+
+Respond ONLY with JSON matching the SCHEMA."""
         
         prompt = ChatPromptTemplate.from_template(template_str)
         chain = prompt | self.llm
 
+        context_str = ""
+        if contexts and len(contexts) > 0:
+            context_str = "CONTEXT PINS: The user has ACTIVELY SELECTED the following items:\n"
+            for idx, c in enumerate(contexts):
+                context_str += f"- [Pin {idx+1}] {c.get('element_type', 'element').upper()} with GlobalID: {c.get('element_id')}\n"
+
         def _invoke_and_parse(instruction_text: str) -> Dict[str, Any]:
-            response = chain.invoke({"instruction": instruction_text})
+            response = chain.invoke({
+                "instruction": instruction_text,
+                "context_block": context_str
+            })
             raw_content = response.content
             if isinstance(raw_content, str):
                 response_text = raw_content.strip()
@@ -193,28 +218,13 @@ Respond ONLY with a single JSON object. No explanation, no markdown."""
             except json.JSONDecodeError as e:
                 raise ActionValidationError(f"Failed to parse LLM response as JSON: {e}\nRaw: {response_text}")
 
-        action_dict = _invoke_and_parse(message)
-        action_value = str(action_dict.get("action", "")).strip().lower()
+        response_dict = _invoke_and_parse(message)
+        
+        # Verify the structure has "actions" list
+        if "actions" not in response_dict or not isinstance(response_dict["actions"], list):
+            raise ActionValidationError("LLM response missing 'actions' list property.")
 
-        # Retry once with stronger instruction if model returns non-executable action.
-        if action_value in NON_EXECUTABLE_ACTIONS:
-            strict_message = (
-                f"{message}\n\n"
-                "IMPORTANT: Return an executable action only. "
-                f"Action MUST be one of: {', '.join(ALLOWED_ACTIONS)}. "
-                "Do NOT return none/noop/no_action."
-            )
-            action_dict = _invoke_and_parse(strict_message)
-            action_value = str(action_dict.get("action", "")).strip().lower()
-
-        if action_value in NON_EXECUTABLE_ACTIONS:
-            raise ActionValidationError(
-                "Instruction could not be mapped to an executable model action. "
-                f"Use a concrete edit request (allowed: {', '.join(ALLOWED_ACTIONS)})."
-            )
-
-        validate_action_json(action_dict)
-        return action_dict
+        return response_dict
 
 
 # Global singleton
@@ -232,6 +242,6 @@ def get_chatbot() -> ArchitecturalChatbot:
 
 
 # Convenience function
-def parse_instruction(message: str) -> Dict[str, Any]:
+def parse_instruction(message: str, contexts: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
     """Parse instruction using global chatbot instance."""
-    return get_chatbot().parse_instruction(message)
+    return get_chatbot().parse_instruction(message, contexts)
