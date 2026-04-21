@@ -33,10 +33,13 @@ def _build_query(bbox: BoundingBox, max_road: int, max_landuse: int, max_buildin
   way["highway"]({b});
   way["landuse"]({b});
   way["building"]({b});
+  way["natural"~"water|wood"]({b});
+  relation["landuse"]({b});
   relation["building"]({b});
+  relation["natural"~"water|wood"]({b});
   node["place"]({b});
 );
-out geom {max_road + max_landuse + max_buildings};
+out geom {max_road + max_landuse + max_buildings + 100};
 """
 
 
@@ -44,11 +47,13 @@ def _parse_element(el: dict) -> OsmFeature:
     tags = el.get("tags", {})
     geom = None
 
-    if el.get("type") == "way" and "geometry" in el:
+    if (el.get("type") == "way" or el.get("type") == "relation") and "geometry" in el:
+        # Simplistic parsing: for relations/polygons, we just take the outer ring if possible
+        # In 'out geom' mode, 'geometry' is often a list of lat/lon
         coords = [[p["lon"], p["lat"]] for p in el["geometry"]]
-        if coords[0] == coords[-1] and len(coords) >= 4:
+        if coords and coords[0] == coords[-1] and len(coords) >= 4:
             geom = {"type": "Polygon", "coordinates": [coords]}
-        else:
+        elif coords:
             geom = {"type": "LineString", "coordinates": coords}
     elif el.get("type") == "node":
         geom = {"type": "Point", "coordinates": [el["lon"], el["lat"]]}
@@ -59,6 +64,8 @@ def _parse_element(el: dict) -> OsmFeature:
         feature_type = "landuse"
     elif "building" in tags:
         feature_type = "building"
+    elif "natural" in tags and tags["natural"] in ["water", "wood"]:
+        feature_type = "exclusion"  # Custom type for water/forest
     else:
         feature_type = "place"
 
@@ -87,6 +94,7 @@ async def fetch_osm_context(
     landuse: List[OsmFeature] = []
     places: List[OsmFeature] = []
     buildings: List[OsmFeature] = []
+    exclusions: List[OsmFeature] = []
 
     for el in data.get("elements", []):
         feat = _parse_element(el)
@@ -96,6 +104,8 @@ async def fetch_osm_context(
             landuse.append(feat)
         elif feat.feature_type == "building":
             buildings.append(feat)
+        elif feat.feature_type == "exclusion":
+            exclusions.append(feat)
         else:
             places.append(feat)
 
@@ -105,6 +115,7 @@ async def fetch_osm_context(
         landuse=landuse[:max_landuse_results],
         places=places[:50],
         buildings=buildings[:max_building_results],
+        exclusions=exclusions[:100],
     )
     CACHE[key] = result
     return result

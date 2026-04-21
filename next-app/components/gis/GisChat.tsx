@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Send, MapPin, Layers, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import type { ChatMessage, ChatActionEvent, MapEvent } from "./types";
 
@@ -36,19 +36,24 @@ interface GisChatProps {
 }
 
 export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "agent",
-      content:
-        "Hi! I'm your Spatial Intelligence assistant. Tell me where you'd like to explore, or ask me to find the best land spots anywhere in India.",
-      timestamp: Date.now(),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Set initial welcome message on mount
+  useEffect(() => {
+    setMessages([
+      {
+        id: "welcome",
+        role: "agent",
+        content: "Hi! I'm your Spatial Intelligence assistant. Tell me where you'd like to explore, or ask me to find the best land spots anywhere in India.",
+        timestamp: Date.now(),
+      },
+    ]);
+  }, []);
+
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
@@ -79,6 +84,10 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: text,
+            history: messages.slice(-6).map(m => ({ 
+              role: m.role, 
+              content: m.content.length > 500 ? m.content.substring(0, 500) + "..." : m.content 
+            })),
             context: selectedPolygonInfo ?? null,
           }),
         });
@@ -129,7 +138,18 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
             <p className="text-sm font-semibold text-white leading-none">Spatial Agent</p>
             <p className="text-[11px] text-white/40 mt-0.5">India Land Intelligence</p>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (confirm("Clear chat history?")) {
+                  localStorage.removeItem("gis_chat_history");
+                  window.location.reload();
+                }
+              }}
+              className="text-[10px] text-white/30 hover:text-red-400 transition-colors uppercase tracking-wider font-bold"
+            >
+              Clear
+            </button>
             <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 bg-emerald-400/10 rounded-full px-2 py-0.5 font-medium">
               <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
               Live
@@ -199,21 +219,25 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Suggested prompts ──────────────────────────────────────── */}
-      {messages.length <= 2 && (
+      {/* ── Suggested prompts (Minimized) ─────────────────────────── */}
+      {messages.length <= 1 && (
         <div className="flex-none px-4 pb-2">
-          <p className="text-[11px] text-white/30 mb-2 font-medium uppercase tracking-wide">
-            Try asking
-          </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex items-center gap-2 mb-1.5">
+             <div className="h-[1px] flex-1 bg-white/5" />
+             <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest whitespace-nowrap">
+               Try asking
+             </p>
+             <div className="h-[1px] flex-1 bg-white/5" />
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
             {SUGGESTED_PROMPTS.map((p) => (
               <button
                 key={p}
                 onClick={() => sendMessage(p)}
                 disabled={loading}
-                className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-white/70
-                           hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-indigo-300
-                           transition-all duration-150 disabled:opacity-40"
+                className="flex-none text-[10px] px-2.5 py-1 rounded-lg border border-white/5 bg-white/5 text-white/40
+                           hover:bg-indigo-500/15 hover:border-indigo-500/30 hover:text-indigo-300
+                           transition-all duration-150 disabled:opacity-40 whitespace-nowrap"
               >
                 {p}
               </button>

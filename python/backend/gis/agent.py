@@ -16,7 +16,7 @@ import math
 import re
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph
@@ -152,7 +152,41 @@ async def suggestSkyscraperLand(
     return json.dumps([c.model_dump() for c in candidates])
 
 
-TOOLS = [geocodePlace, regionToPolygon, getLandContext, rankCandidateParcels, suggestSkyscraperLand]
+@tool
+async def get_suitable_regions(min_lat: float, min_lon: float, max_lat: float, max_lon: float, max_results: int = 5) -> str:
+    """
+    Search for construction-suitable land parcels within a bounding box.
+    Uses real OSM data (roads, landuse, buildings) to score and rank locations.
+    Use this when the user asks for suggestions or 'find spots'.
+    """
+    bbox = BoundingBox(min_lat=min_lat, min_lon=min_lon, max_lat=max_lat, max_lon=max_lon)
+    
+    # Create a simple polygon from bbox for scoring
+    polygon = {
+        "type": "Feature",
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+                [min_lon, min_lat],
+                [min_lon, max_lat],
+                [max_lon, max_lat],
+                [max_lon, min_lat],
+                [min_lon, min_lat]
+            ]]
+        }
+    }
+
+    # 2. Fetch OSM
+    osm = await fetch_osm_context(bbox, max_building_results=500)
+    
+    # 3. Score
+    from .scorer import score_suitability
+    candidates = score_suitability(polygon, osm, max_results=max_results)
+    
+    return json.dumps([c.model_dump() for c in candidates])
+
+
+TOOLS = [geocodePlace, regionToPolygon, getLandContext, get_suitable_regions]
 
 
 # ---------------------------------------------------------------------------
@@ -161,40 +195,28 @@ TOOLS = [geocodePlace, regionToPolygon, getLandContext, rankCandidateParcels, su
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
-    action_event: Optional[Dict[str, Any]]
+    full_tool_results: Dict[str, str] # tool_call_id -> raw_json
 
 
 # ---------------------------------------------------------------------------
 # Graph nodes
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are the Spatial Intelligence Agent for InfraSaathi — an AI GIS assistant
-specialising in land selection across India.
+SYSTEM_PROMPT = """You are the Spatial Intelligence Agent for InfraSaathi (India).
+Ground all responses in tool data. Use only available tools.
 
-You have access to five tools:
-- geocodePlace: navigate to a city/landmark
-- regionToPolygon: draw a state/district boundary
-- getLandContext: analyse OSM data around an area
-- rankCandidateParcels: find and rank the best land parcels in a region
-- suggestSkyscraperLand: find large, completely empty (no buildings) parcels for a skyscraper
-
-RESPONSE RULES:
-1. Always call a tool when the user intent maps to one.
-2. After the tool returns, build a JSON action event:
-   {
-     "action_type": "flyTo" | "drawPolygon" | "suggestAreas" | "filterAreas" | "none",
-     "payload": { ... },
-     "explanation": "human-friendly summary",
-     "follow_up": null   // optional follow-up question
-   }
-3. For flyTo payload use: {"center": [lon, lat], "zoom": <int>}
-4. For drawPolygon payload use: {"geojson": <GeoJSON Feature>}
-5. For suggestAreas payload use: {"candidates": [...], "bbox": {...}}
-6. For filterAreas payload use refined candidates list.
-7. Never make up coordinates. Always use tool results.
-8. Stay within India's bounds (6°N–37.5°N, 68°E–97.5°E).
-
-Return ONLY the JSON action event as your final message content — no markdown fences, no extra text.
+ACTION FORMAT:
+Return ONLY a JSON object:
+{
+  "action_type": "flyTo" | "drawPolygon" | "suggestAreas" | "none",
+  "payload": {
+    "geojson": <Feature>,
+    "center": [lon, lat],
+    "candidates": [...]
+  },
+  "explanation": "Human summary",
+  "follow_up": "Next step?"
+}
 """
 
 
@@ -203,8 +225,19 @@ async def agent_node(state: AgentState) -> AgentState:
     llm = _get_llm()
     llm_with_tools = llm.bind_tools(TOOLS)
 
-    messages = [HumanMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
-    response = await llm_with_tools.ainvoke(messages)
+    # Keep only last 10 messages to save context
+    msgs = list(state["messages"])
+    if len(msgs) > 10:
+        msgs = msgs[-10:]
+
+    # Prepend system prompt if not present
+    if not msgs or not isinstance(msgs[0], SystemMessage):
+        msgs = [SystemMessage(content=SYSTEM_PROMPT)] + msgs
+    
+    # Add a hidden hint to avoid XML syntax
+    msgs.append(HumanMessage(content="IMPORTANT: Call tools natively. Do NOT use <function> tags or XML. Return ONLY the requested JSON after tool results are in."))
+
+    response = await llm_with_tools.ainvoke(msgs)
     return {"messages": [response]}
 
 
@@ -212,6 +245,7 @@ async def tool_node(state: AgentState) -> AgentState:
     """Execute any tool calls requested by the LLM."""
     last_msg = state["messages"][-1]
     tool_messages: List[ToolMessage] = []
+    full_results: Dict[str, str] = {}
 
     tool_map = {t.name: t for t in TOOLS}
 
@@ -221,7 +255,26 @@ async def tool_node(state: AgentState) -> AgentState:
             result = json.dumps({"error": f"Unknown tool {tc['name']}"})
         else:
             try:
-                result = await fn.ainvoke(tc["args"])
+                raw_result = await fn.ainvoke(tc["args"])
+                full_results[tc["id"]] = raw_result
+                
+                # OPTIMIZATION: Strip heavy data for the LLM's next reasoning step
+                try:
+                    data = json.loads(raw_result)
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict):
+                                item.pop("geometry", None)
+                                item.pop("bbox", None)
+                        result = json.dumps(data)
+                    elif isinstance(data, dict):
+                        data.pop("geometry", None)
+                        data.pop("geojson", None)
+                        result = json.dumps(data)
+                    else:
+                        result = raw_result
+                except:
+                    result = raw_result
             except Exception as exc:
                 result = json.dumps({"error": str(exc)})
 
@@ -229,20 +282,31 @@ async def tool_node(state: AgentState) -> AgentState:
             ToolMessage(content=result, tool_call_id=tc["id"])
         )
 
-    return {"messages": tool_messages}
+    return {"messages": tool_messages, "full_tool_results": full_results}
 
 
 async def summarize_node(state: AgentState) -> AgentState:
     """
-    After tool execution, ask the LLM to produce the final ChatActionEvent JSON.
+    Produce the final JSON ChatActionEvent.
+    Inject full data (geometries) back into the prompt context for this final step only.
     """
     llm = _get_llm()
-    messages = [HumanMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
-    messages.append(HumanMessage(
-        content="Based on the tool results above, output the final JSON ChatActionEvent. "
-                "Output ONLY valid JSON, no markdown fences."
+    # Build a special prompt for the final JSON generation that includes the raw data
+    raw_data_summary = "\n".join([f"Tool {tid} full data: {val}" for tid, val in state.get("full_tool_results", {}).items()])
+    
+    msgs = list(state["messages"])
+    if len(msgs) > 10:
+        msgs = msgs[-10:]
+    
+    if not msgs or not isinstance(msgs[0], SystemMessage):
+        msgs = [SystemMessage(content=SYSTEM_PROMPT)] + msgs
+
+    msgs.append(HumanMessage(
+        content=f"FULL DATA REFERENCE:\n{raw_data_summary}\n\n"
+                "Based on the tool results and the FULL DATA above, output the final JSON ChatActionEvent. "
+                "Ensure geometries are included in the payload. Output ONLY valid JSON."
     ))
-    response = await llm.ainvoke(messages)
+    response = await llm.ainvoke(msgs)
     return {"messages": [response]}
 
 
@@ -289,7 +353,11 @@ def get_graph():
 # Public entry point
 # ---------------------------------------------------------------------------
 
-async def run_agent(message: str, context: Optional[Dict] = None) -> ChatActionEvent:
+async def run_agent(
+    message: str, 
+    history: Optional[List[Dict]] = None,
+    context: Optional[Dict] = None
+) -> ChatActionEvent:
     """
     Run the spatial agent on a user message.
     Returns a structured ChatActionEvent.
@@ -366,10 +434,21 @@ async def run_agent(message: str, context: Optional[Dict] = None) -> ChatActionE
     if context:
         context_prefix = f"[Context: {json.dumps(context)}]\n\n"
 
+    # Convert history to LangChain messages
+    history_messages = []
+    if history:
+        for m in history:
+            role = m.get("role")
+            content = m.get("content", "")
+            if role == "user":
+                history_messages.append(HumanMessage(content=content))
+            elif role == "agent":
+                history_messages.append(AIMessage(content=content))
+
     graph = get_graph()
     initial_state: AgentState = {
-        "messages": [HumanMessage(content=context_prefix + message)],
-        "action_event": None,
+        "messages": history_messages + [HumanMessage(content=context_prefix + message)],
+        "full_tool_results": {},
     }
 
     final_state = await graph.ainvoke(initial_state)

@@ -3,10 +3,12 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-// @ts-expect-error missing types for mapbox-gl-draw
-import MapboxDraw from "@mapbox/mapbox-gl-draw";
-import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
+// @ts-expect-error missing types for maplibre-gl-draw
+import MapboxDraw from "maplibre-gl-draw";
+import "maplibre-gl-draw/dist/mapbox-gl-draw.css";
 import area from "@turf/area";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { MapEvent, SuggestionItem, BBox } from "./types";
 
 // ── Confidence colours ────────────────────────────────────────────────────
@@ -145,6 +147,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
   const drawRef = useRef<MapboxDraw | null>(null);
   const fitInsideRef = useRef<GeoJSON.Geometry | null>(null);
   const fitOverflowRef = useRef<GeoJSON.Geometry | null>(null);
+  const threeLayerRef = useRef<any>(null);
 
   const [currentStyle, setCurrentStyle] = useState<MapStyleKey>("hybrid");
   const [polygonArea, setPolygonArea] = useState<number | null>(null);
@@ -452,6 +455,97 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
     );
   }, []);
 
+  const set3DModel = useCallback((glbUrl: string | null, center: [number, number], rotation: number, scale: number = 1) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Remove existing layer if any
+    if (map.getLayer("3d-model")) {
+      map.removeLayer("3d-model");
+      threeLayerRef.current = null;
+    }
+
+    if (!glbUrl) return;
+
+    const modelOrigin = center;
+    const modelAltitude = 0;
+    const modelRotate = [Math.PI / 2, (rotation * Math.PI) / 180, 0];
+
+    const modelAsMercator = maplibregl.MercatorCoordinate.fromLngLat(
+        modelOrigin,
+        modelAltitude
+    );
+
+    const modelTransform = {
+        translateX: modelAsMercator.x,
+        translateY: modelAsMercator.y,
+        translateZ: modelAsMercator.z,
+        rotateX: modelRotate[0],
+        rotateY: modelRotate[1],
+        rotateZ: modelRotate[2],
+        scale: modelAsMercator.meterInMercatorCoordinateUnits() * scale
+    };
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.Camera();
+
+    // Lighting
+    const directionalLight = new THREE.DirectionalLight(0xffffff);
+    directionalLight.position.set(0, -70, 100).normalize();
+    scene.add(directionalLight);
+    
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const loader = new GLTFLoader();
+    loader.load(glbUrl, (gltf) => {
+        scene.add(gltf.scene);
+    });
+
+    let renderer: THREE.WebGLRenderer;
+
+    const customLayer: maplibregl.CustomLayerInterface = {
+        id: '3d-model',
+        type: 'custom',
+        renderingMode: '3d',
+        onAdd: function (map, gl) {
+            renderer = new THREE.WebGLRenderer({
+                canvas: map.getCanvas(),
+                context: gl,
+                antialias: true
+            });
+            renderer.autoClear = false;
+        },
+        render: function (gl, matrix) {
+            const m = new THREE.Matrix4().fromArray(matrix);
+            const l = new THREE.Matrix4()
+                .makeTranslation(
+                    modelTransform.translateX,
+                    modelTransform.translateY,
+                    modelTransform.translateZ
+                )
+                .scale(
+                    new THREE.Vector3(
+                        modelTransform.scale,
+                        -modelTransform.scale,
+                        modelTransform.scale
+                    )
+                )
+                .multiply(new THREE.Matrix4().makeRotationX(modelTransform.rotateX))
+                .multiply(new THREE.Matrix4().makeRotationY(modelTransform.rotateY))
+                .multiply(new THREE.Matrix4().makeRotationZ(modelTransform.rotateZ));
+
+            camera.projectionMatrix = m.multiply(l);
+            renderer.resetState();
+            renderer.render(scene, camera);
+            map.triggerRepaint();
+        }
+    };
+
+    map.addLayer(customLayer);
+    threeLayerRef.current = customLayer;
+  }, []);
+
   // ── Expose handle ────────────────────────────────────────────────────────
   useImperativeHandle(
     ref,
@@ -471,26 +565,34 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
           }
 
           case "drawPolygon": {
-            const p = event.payload as { geojson: GeoJSON.Feature };
-            if (!p.geojson) break;
+            const geojson = (event.payload.geojson || event.payload.geometry || event.payload.feature) as GeoJSON.Feature;
+            if (!geojson) break;
 
             if (drawRef.current) {
-               drawRef.current.deleteAll(); // clear existing
-               drawRef.current.add(p.geojson);
-               // calculate area
-               const sqMeters = area(p.geojson);
-               setPolygonArea(sqMeters);
-            }
-            setSelectedPolygon(p.geojson);
+              const feature: GeoJSON.Feature = geojson.type === "Feature" 
+                ? geojson 
+                : { type: "Feature", properties: {}, geometry: geojson as any };
+              
+              drawRef.current.deleteAll();
+              const ids = drawRef.current.add(feature);
+              if (ids.length > 0) {
+                drawRef.current.changeMode("simple_select", { featureIds: ids });
+              }
+              
+              // Update state
+              const sqMeters = area(feature);
+              setPolygonArea(sqMeters);
+              setSelectedPolygon(feature);
 
-            // Fit bounds
-            const coords = (p.geojson.geometry as { coordinates: [number, number][][] }).coordinates?.[0];
-            if (coords?.length) {
-              const bounds = coords.reduce(
-                (b, c) => b.extend(c as maplibregl.LngLatLike),
-                new maplibregl.LngLatBounds(coords[0] as maplibregl.LngLatLike, coords[0] as maplibregl.LngLatLike)
-              );
-              map.fitBounds(bounds, { padding: 60, pitch: 40, maxZoom: 14, duration: 1800 });
+              // Fit bounds
+              const coords = (feature.geometry as { coordinates: [number, number][][] }).coordinates?.[0];
+              if (coords?.length) {
+                const bounds = coords.reduce(
+                  (b, c) => b.extend(c as maplibregl.LngLatLike),
+                  new maplibregl.LngLatBounds(coords[0] as maplibregl.LngLatLike, coords[0] as maplibregl.LngLatLike)
+                );
+                map.fitBounds(bounds, { padding: 60, pitch: 40, maxZoom: 14, duration: 1800 });
+              }
             }
             break;
           }
@@ -527,6 +629,13 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
 
           case "clearFitValidation": {
             setFitValidation(null, null);
+            set3DModel(null, [0, 0], 0);
+            break;
+          }
+
+          case "loadModel": {
+            const p = event.payload as { glbUrl: string; center: [number, number]; rotation: number; scale?: number };
+            set3DModel(p.glbUrl, p.center, p.rotation, p.scale);
             break;
           }
 

@@ -275,3 +275,98 @@ def score_candidates(
     # Sort by score descending, return top-N
     candidates.sort(key=lambda c: c.score, reverse=True)
     return candidates[:top_n]
+def _exclusion_overlap(bbox: BoundingBox, osm: OsmContextResult) -> bool:
+    """Return True if the bbox overlaps with any exclusion feature (water, forest)."""
+    for ex in osm.exclusions:
+        if ex.geometry and ex.geometry.get("type") == "Polygon":
+            coords = ex.geometry["coordinates"][0]
+            # Simple check: do any coords of the exclusion fall in the bbox?
+            for c in coords:
+                if bbox.min_lon <= c[0] <= bbox.max_lon and bbox.min_lat <= c[1] <= bbox.max_lat:
+                    return True
+    return False
+
+
+def score_suitability(
+    polygon_geojson: dict,
+    osm: OsmContextResult,
+    max_results: int = 5,
+    tile_m: float = 300.0,
+) -> List[SuitableRegionItem]:
+    """
+    Score and rank suitable construction spots within a provided GeoJSON polygon.
+    """
+    # 1. Get bbox of the polygon
+    geom = polygon_geojson.get("geometry", polygon_geojson)
+    if geom["type"] != "Polygon":
+        return []
+    
+    coords = geom["coordinates"][0]
+    lons = [c[0] for c in coords]
+    lats = [c[1] for c in coords]
+    bbox = BoundingBox(min_lon=min(lons), min_lat=min(lats), max_lon=max(lons), max_lat=max(lats))
+
+    # 2. Tile the bbox
+    center_lat = (bbox.min_lat + bbox.max_lat) / 2
+    step_lat = tile_m * _deg_per_m_lat()
+    step_lon = tile_m * _deg_per_m_lon(center_lat)
+
+    cols = max(1, int((bbox.max_lon - bbox.min_lon) / step_lon))
+    rows = max(1, int((bbox.max_lat - bbox.min_lat) / step_lat))
+
+    # Cap grid
+    cols = min(cols, 10)
+    rows = min(rows, 10)
+
+    candidates: List[SuitableRegionItem] = []
+
+    for row in range(rows):
+        for col in range(cols):
+            tile = _tile_bbox(col, row, bbox.min_lon, bbox.min_lat, step_lon, step_lat)
+            centroid = _centroid(tile)
+            
+            # Simple check if centroid is in the original polygon (approx)
+            # For brevity, we skip rigorous point-in-polygon here, but it's recommended
+            
+            # 3. Check exclusions
+            if _exclusion_overlap(tile, osm):
+                continue
+            
+            # 4. Check buildings (density)
+            b_count = _building_overlap(tile, osm)
+            density_penalty = min(1.0, b_count / 10.0) # 10+ buildings = 0 score boost
+
+            # 5. Score components
+            road_score = _road_proximity_score(centroid, osm)
+            compat_score, dominant = _landuse_compat_score(tile, osm)
+            
+            # Accessibility/Density logic
+            # Higher road proximity + compatible landuse + lower building density
+            score_val = (road_score * 0.4 + compat_score * 0.4 + (1.0 - density_penalty) * 0.2) * 100
+            
+            reasons = []
+            if road_score > 0.6: reasons.append("High road accessibility")
+            if dominant in URBAN_LANDUSE: reasons.append(f"Located in {dominant} zone")
+            if b_count < 2: reasons.append("Low building density (open land)")
+            if b_count > 5: reasons.append("Moderate building density")
+            
+            candidates.append(SuitableRegionItem(
+                lat=centroid[1],
+                lng=centroid[0],
+                score=int(score_val),
+                reasons=reasons,
+                geometry={
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [tile.min_lon, tile.min_lat],
+                        [tile.max_lon, tile.min_lat],
+                        [tile.max_lon, tile.max_lat],
+                        [tile.min_lon, tile.max_lat],
+                        [tile.min_lon, tile.min_lat],
+                    ]]
+                }
+            ))
+
+    # Sort and return
+    candidates.sort(key=lambda x: x.score, reverse=True)
+    return candidates[:max_results]

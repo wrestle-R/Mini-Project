@@ -66,6 +66,7 @@ class OsmContextResult(BaseModel):
     landuse: List[OsmFeature]
     places: List[OsmFeature]
     buildings: List[OsmFeature] = Field(default_factory=list)
+    exclusions: List[OsmFeature] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +99,23 @@ class SuggestionItem(BaseModel):
 class SuggestLandResult(BaseModel):
     candidates: List[SuggestionItem]
     bbox: BoundingBox
+
+
+# ---------------------------------------------------------------------------
+# Suitability Engine (Fix 1)
+# ---------------------------------------------------------------------------
+
+class SuitableRegionsRequest(BaseModel):
+    polygon: dict = Field(..., description="GeoJSON polygon geometry")
+    max_results: int = Field(5, description="Maximum number of ranked results")
+
+
+class SuitableRegionItem(BaseModel):
+    lat: float
+    lng: float
+    score: int
+    reasons: List[str]
+    geometry: Optional[dict] = None  # To highlight on map
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +173,7 @@ class FitValidationResult(BaseModel):
 
 class GisChatRequest(BaseModel):
     message: str
+    history: Optional[List[dict]] = None
     context: Optional[dict] = None   # optional selected polygon / viewport
 
 

@@ -19,10 +19,42 @@ from .schemas import (
     OsmContextRequest,
     RegionPolygonRequest,
     SuggestLandRequest,
+    SuitableRegionsRequest,
 )
-from .scorer import score_candidates
+from .scorer import score_candidates, score_suitability
 
 router = APIRouter(prefix="/api/gis", tags=["GIS"])
+
+
+# ---------------------------------------------------------------------------
+# POST /api/gis/suitable-regions
+# ---------------------------------------------------------------------------
+@router.post("/suitable-regions")
+async def suitable_regions_endpoint(req: SuitableRegionsRequest):
+    """
+    Returns ranked construction-suitable locations using OSM data within a polygon.
+    """
+    try:
+        # 1. Get bbox
+        geom = req.polygon.get("geometry", req.polygon)
+        coords = geom.get("coordinates", [[]])[0]
+        if not coords:
+             raise HTTPException(status_code=400, detail="Invalid polygon")
+        
+        from .schemas import BoundingBox
+        lons = [c[0] for c in coords]
+        lats = [c[1] for c in coords]
+        bbox = BoundingBox(min_lon=min(lons), min_lat=min(lats), max_lon=max(lons), max_lat=max(lats))
+
+        # 2. Fetch OSM
+        osm = await fetch_osm_context(bbox)
+        
+        # 3. Score
+        candidates = score_suitability(req.polygon, osm, max_results=req.max_results)
+        
+        return JSONResponse(content=[c.model_dump() for c in candidates])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Suitability analysis failed: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +142,7 @@ async def gis_chat_endpoint(req: GisChatRequest):
     that the frontend translates into map actions.
     """
     try:
-        event = await run_agent(message=req.message, context=req.context)
+        event = await run_agent(message=req.message, history=req.history, context=req.context)
         return JSONResponse(content=event.model_dump())
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Agent error: {exc}")

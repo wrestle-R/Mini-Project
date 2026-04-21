@@ -382,6 +382,16 @@
   }
 }
 
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
 /* Google Translate cleanup to avoid default injected UI clashing with app theme. */
 .skiptranslate iframe,
 .goog-te-banner-frame,

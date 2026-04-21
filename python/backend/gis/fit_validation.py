@@ -108,10 +108,14 @@ def _land_polygon_from_geojson(req: FitValidationRequest) -> tuple[Polygon, floa
             polys.append(Polygon(shell, holes).buffer(0))
         poly = MultiPolygon(polys).buffer(0)
 
+    from shapely.validation import make_valid
+    poly = make_valid(poly)
+
     if poly.is_empty:
         raise ValueError("Selected land polygon becomes invalid after projection")
 
     return poly, lon, lat
+
 
 
 def _model_polygon(width_m: float, depth_m: float, rotation_deg: float, offset_x_m: float, offset_y_m: float) -> Polygon:
@@ -136,13 +140,26 @@ def _cardinal_direction(dx: float, dy: float) -> str:
     return labels[idx]
 
 
-def _max_overflow_distance(overflow_geom: Polygon | MultiPolygon, land_geom: Polygon | MultiPolygon) -> float:
-    if overflow_geom.is_empty:
+def _max_overflow_distance(overflow_geom: object, land_geom: Polygon | MultiPolygon) -> float:
+    from shapely.geometry import GeometryCollection, Polygon, MultiPolygon
+    if not overflow_geom or getattr(overflow_geom, "is_empty", True):
         return 0.0
 
+    # Extract all polygons from whatever geometry we have
+    polys = []
+    if isinstance(overflow_geom, Polygon):
+        polys.append(overflow_geom)
+    elif isinstance(overflow_geom, MultiPolygon):
+        polys.extend(list(overflow_geom.geoms))
+    elif isinstance(overflow_geom, GeometryCollection):
+        for g in overflow_geom.geoms:
+            if isinstance(g, Polygon):
+                polys.append(g)
+            elif isinstance(g, MultiPolygon):
+                polys.extend(list(g.geoms))
+
     max_d = 0.0
-    geoms = overflow_geom.geoms if isinstance(overflow_geom, MultiPolygon) else [overflow_geom]
-    for geom in geoms:
+    for geom in polys:
         for x, y in geom.exterior.coords:
             p = Point(x, y)
             if land_geom.contains(p) or land_geom.touches(p):

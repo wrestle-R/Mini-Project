@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import {
   Map,
   Sparkles,
@@ -15,6 +15,7 @@ import {
   RotateCw,
   CheckCircle2,
   AlertTriangle,
+  MapPin,
 } from "lucide-react";
 import type { GisMapHandle } from "@/components/gis/GisMap";
 import type { MapEvent, SuggestionItem } from "@/components/gis/types";
@@ -23,6 +24,14 @@ import ParcelCard from "@/components/gis/ParcelCard";
 // Dynamic imports — no SSR for maplibre-gl (requires browser DOM)
 const GisMap = dynamic(() => import("@/components/gis/GisMap"), { ssr: false });
 const GisChat = dynamic(() => import("@/components/gis/GisChat"), { ssr: false });
+
+import { useContractor } from "@/contexts/ContractorContext";
+
+interface SessionSummary {
+  id: string;
+  title: string;
+  currentGlbUrl: string;
+}
 
 interface SelectedParcelInfo {
   areaSqm: number;
@@ -62,19 +71,79 @@ interface FitValidationResult {
 const GIS_BACKEND = "http://localhost:8000";
 
 export default function GisLandSelectionPage() {
+  const { token } = useContractor();
   const mapRef = useRef<GisMapHandle>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+  const [parcels, setParcels] = useState<any[]>([]); // Saved parcels
   const [lockedParcel, setLockedParcel] = useState<SuggestionItem | null>(null);
   const [selectedPolygon, setSelectedPolygon] = useState<SelectedParcelInfo | null>(null);
   const [rightPanel, setRightPanel] = useState<"chat" | "parcels">("chat");
   const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [fetchingSessions, setFetchingSessions] = useState(false);
+  const [loadingModel, setLoadingModel] = useState(false);
   const [modelFileName, setModelFileName] = useState<string | null>(null);
   const [modelDimensions, setModelDimensions] = useState<ModelDimensions | null>(null);
   const [rotationDeg, setRotationDeg] = useState(0);
   const [roadWarningDistanceM, setRoadWarningDistanceM] = useState(50);
   const [validatingFit, setValidatingFit] = useState(false);
   const [fitResult, setFitResult] = useState<FitValidationResult | null>(null);
+  const [currentGlbUrl, setCurrentGlbUrl] = useState<string | null>(null);
+
+  // Load parcels from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("gis_saved_parcels");
+      if (saved) {
+        try { setParcels(JSON.parse(saved)); } catch (e) { console.error(e); }
+      }
+    }
+  }, []);
+
+  // Fetch saved sessions
+  useEffect(() => {
+    async function fetchSessions() {
+      if (!token) return;
+      setFetchingSessions(true);
+      try {
+        const res = await fetch("/api/contractor/ifc/sessions", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data.sessions || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch sessions", err);
+      } finally {
+        setFetchingSessions(false);
+      }
+    }
+    fetchSessions();
+  }, [token]);
+
+  // Save parcels to localStorage
+  const saveParcels = useCallback((newParcels: any[]) => {
+    setParcels(newParcels);
+    localStorage.setItem("gis_saved_parcels", JSON.stringify(newParcels));
+  }, []);
+
+  const handleSaveSelection = useCallback(() => {
+    if (!selectedPolygon) return;
+    const newParcel = {
+      id: crypto.randomUUID(),
+      name: `Parcel ${parcels.length + 1}`,
+      coordinates: (selectedPolygon.geojson.geometry as any).coordinates[0],
+      centroid: selectedPolygon.centroid,
+      area: selectedPolygon.areaSqm,
+      geojson: selectedPolygon.geojson,
+    };
+    saveParcels([...parcels, newParcel]);
+  }, [selectedPolygon, parcels, saveParcels]);
+
+  const handleDeleteParcel = useCallback((id: string) => {
+    saveParcels(parcels.filter(p => p.id !== id));
+  }, [parcels, saveParcels]);
 
   // ── Map event dispatcher (chat → map) ────────────────────────────────
   const handleMapEvent = useCallback((event: MapEvent) => {
@@ -174,14 +243,13 @@ export default function GisLandSelectionPage() {
     setFitResult(null);
   }, []);
 
-  const detectModelDimensions = useCallback(async (file: File): Promise<ModelDimensions> => {
+  const detectModelDimensions = useCallback(async (buffer: ArrayBuffer): Promise<ModelDimensions> => {
     const [{ GLTFLoader }, THREE] = await Promise.all([
       import("three/examples/jsm/loaders/GLTFLoader.js"),
       import("three"),
     ]);
 
     const loader = new GLTFLoader();
-    const buffer = await file.arrayBuffer();
     const gltf = await new Promise<any>((resolve, reject) => {
       loader.parse(buffer, "", resolve, reject);
     });
@@ -202,18 +270,47 @@ export default function GisLandSelectionPage() {
     };
   }, []);
 
-  const handleModelUpload = useCallback(async () => {
-    const file = fileRef.current?.files?.[0];
-    if (!file) return;
-    const lower = file.name.toLowerCase();
-    if (!lower.endsWith(".glb") && !lower.endsWith(".gltf")) return;
+  const handleModelSelect = useCallback(async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const sessionId = e.target.value;
+    if (!sessionId) return;
+    
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session || !session.currentGlbUrl || !token) return;
 
-    const dims = await detectModelDimensions(file);
-    setModelFileName(file.name);
-    setModelDimensions(dims);
-    setFitResult(null);
-    mapRef.current?.dispatchMapEvent({ type: "clearFitValidation", payload: { clear: true } });
-  }, [detectModelDimensions]);
+    setLoadingModel(true);
+    try {
+      const res = await fetch(session.currentGlbUrl, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("Failed to download model");
+      
+      const buffer = await res.arrayBuffer();
+      const dims = await detectModelDimensions(buffer);
+      
+      setModelFileName(session.title);
+      setModelDimensions(dims);
+      setCurrentGlbUrl(session.currentGlbUrl);
+      setFitResult(null);
+      mapRef.current?.dispatchMapEvent({ type: "clearFitValidation", payload: { clear: true } });
+      
+      if (selectedPolygon) {
+        mapRef.current?.dispatchMapEvent({
+          type: "loadModel",
+          payload: {
+            glbUrl: session.currentGlbUrl,
+            center: selectedPolygon.centroid,
+            rotation: rotationDeg,
+            scale: 1
+          }
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load model from saved history.");
+    } finally {
+      setLoadingModel(false);
+    }
+  }, [sessions, detectModelDimensions, token]);
 
   const handleValidateFit = useCallback(async () => {
     const landFeature = selectedPolygon?.geojson ?? null;
@@ -272,7 +369,17 @@ export default function GisLandSelectionPage() {
           <span className="text-xs text-white/40">Spatial Intelligence Agent · India</span>
         </div>
 
-        <div className="flex items-center gap-2">
+          {selectedPolygon && (
+            <button
+              onClick={handleSaveSelection}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg
+                         bg-indigo-500/15 border border-indigo-500/30 text-indigo-400
+                         hover:bg-indigo-500/25 transition-all duration-150"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Save Selection
+            </button>
+          )}
           {(lockedParcel || selectedPolygon) && (
             <button
               id="gis-export-btn"
@@ -283,10 +390,10 @@ export default function GisLandSelectionPage() {
                          hover:bg-emerald-500/25 transition-all duration-150"
             >
               <Download className="w-3.5 h-3.5" />
-              Export GeoJSON
+              Export
             </button>
           )}
-          {suggestions.length > 0 && (
+          {(suggestions.length > 0 || parcels.length > 0) && (
             <button
               id="gis-clear-btn"
               onClick={handleClear}
@@ -299,7 +406,6 @@ export default function GisLandSelectionPage() {
               Clear
             </button>
           )}
-        </div>
       </header>
 
       {/* ── Main area ────────────────────────────────────────────────── */}
@@ -352,21 +458,17 @@ export default function GisLandSelectionPage() {
           <div className="flex-none border-b border-white/8 p-3 space-y-2.5">
             <p className="text-[11px] uppercase tracking-wide text-white/35 font-semibold">Model Fit Validation</p>
             <div className="flex items-center gap-2">
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".glb,.gltf"
-                onChange={handleModelUpload}
-                className="hidden"
-                id="gis-model-upload"
-              />
-              <label
-                htmlFor="gis-model-upload"
-                className="cursor-pointer flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-white/12 bg-white/5 text-white/70 hover:bg-white/10 transition-colors"
+              <select
+                className="flex-1 text-[11px] px-2 py-2 rounded-lg border border-white/12 bg-white/5 text-white/70 hover:bg-white/10 transition-colors disabled:opacity-40"
+                onChange={handleModelSelect}
+                disabled={!selectedPolygon || fetchingSessions || loadingModel}
+                value={modelFileName ? sessions.find(s => s.title === modelFileName)?.id || "" : ""}
               >
-                <Upload className="w-3.5 h-3.5" />
-                Upload GLB
-              </label>
+                <option value="">Select saved 3D model...</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
               <button
                 onClick={handleValidateFit}
                 disabled={!selectedPolygon || !modelDimensions || validatingFit}
@@ -375,15 +477,39 @@ export default function GisLandSelectionPage() {
                 {validatingFit ? "Validating..." : "Validate"}
               </button>
             </div>
+            {!selectedPolygon && (
+              <p className="text-[10px] text-amber-400/80 mt-1">
+                Please select or draw a land parcel first to load a model.
+              </p>
+            )}
 
             {modelFileName && modelDimensions && (
-              <div className="text-[11px] text-white/55 bg-white/5 border border-white/10 rounded-lg p-2.5 space-y-1">
-                <p className="text-white/75 truncate">{modelFileName}</p>
+              <button
+                onClick={() => {
+                  if (selectedPolygon) {
+                    mapRef.current?.dispatchMapEvent({
+                      type: "flyTo",
+                      payload: { center: selectedPolygon.centroid, zoom: 16 }
+                    });
+                  }
+                }}
+                title="Click to view model location on map"
+                className="w-full text-left text-[11px] text-white/55 bg-white/5 border border-white/10 rounded-lg p-2.5 space-y-1 hover:bg-white/10 hover:border-indigo-500/30 transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-white/75 truncate font-medium group-hover:text-indigo-400 transition-colors">
+                    {modelFileName}
+                  </p>
+                  <MapPin className="w-3 h-3 text-white/30 group-hover:text-indigo-400 transition-colors" />
+                </div>
                 <p>
                   {modelDimensions.width_m.toFixed(1)}m x {modelDimensions.depth_m.toFixed(1)}m x {modelDimensions.height_m.toFixed(1)}m
                   <span className="text-white/35"> ({modelDimensions.up_axis.toUpperCase()}-up detected)</span>
                 </p>
-              </div>
+                <p className="text-[9px] text-indigo-400/60 font-semibold uppercase tracking-wider mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                   Click to focus on map
+                </p>
+              </button>
             )}
 
             <div className="grid grid-cols-2 gap-2">
@@ -396,7 +522,20 @@ export default function GisLandSelectionPage() {
                     min={0}
                     max={360}
                     value={rotationDeg}
-                    onChange={(e) => setRotationDeg(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setRotationDeg(val);
+                      if (currentGlbUrl && selectedPolygon) {
+                        mapRef.current?.dispatchMapEvent({
+                          type: "loadModel",
+                          payload: {
+                            glbUrl: currentGlbUrl,
+                            center: selectedPolygon.centroid,
+                            rotation: val
+                          }
+                        });
+                      }
+                    }}
                     className="w-full"
                   />
                 </div>
@@ -476,9 +615,9 @@ export default function GisLandSelectionPage() {
             >
               <Map className="w-3.5 h-3.5" />
               Parcels
-              {suggestions.length > 0 && (
+              {suggestions.length + parcels.length > 0 && (
                 <span className="absolute top-1.5 right-3 w-4 h-4 rounded-full bg-indigo-600 text-[9px] text-white font-bold flex items-center justify-center">
-                  {suggestions.length}
+                  {suggestions.length + parcels.length}
                 </span>
               )}
             </button>
@@ -497,42 +636,74 @@ export default function GisLandSelectionPage() {
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto">
-                {suggestions.length === 0 ? (
+                {suggestions.length === 0 && parcels.length === 0 ? (
                   <div className="p-6 text-center space-y-3">
                     <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
                       <Map className="w-6 h-6 text-white/20" />
                     </div>
-                    <p className="text-sm text-white/30">No suggestions yet.</p>
+                    <p className="text-sm text-white/30">No suggestions or parcels yet.</p>
                     <p className="text-xs text-white/20">
-                      Ask the agent to find land, e.g. "Show good plots near Pune"
+                      Ask the agent or draw a polygon on the map to save it.
                     </p>
                   </div>
                 ) : (
-                  <div className="p-3 space-y-2.5">
-                    {/* Locked parcel banner */}
-                    {lockedParcel && (
-                      <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-3 py-2 text-xs text-indigo-300 mb-1">
-                        <Lock className="w-3.5 h-3.5" />
-                        Parcel #{suggestions.findIndex((s) => s.id === lockedParcel.id) + 1} selected
-                        <button
-                          onClick={() => setLockedParcel(null)}
-                          className="ml-auto text-indigo-400/60 hover:text-indigo-300 transition-colors"
-                        >
-                          Cancel
-                        </button>
+                  <div className="p-3 space-y-4">
+                    {/* Saved Parcels Section */}
+                    {parcels.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="px-1 text-[10px] font-bold uppercase tracking-widest text-indigo-400/70">Saved Parcels</p>
+                        {parcels.map((p) => (
+                          <div
+                            key={p.id}
+                            onClick={() => mapRef.current?.dispatchMapEvent({ type: "flyTo", payload: { center: p.centroid, zoom: 16 } })}
+                            className="group relative p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/8 transition-all cursor-pointer"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-semibold text-white/90">{p.name}</p>
+                                <p className="text-[10px] text-white/40 mt-0.5">{(p.area / 10000).toFixed(2)} ha · Saved</p>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteParcel(p.id); }}
+                                className="opacity-0 group-hover:opacity-100 p-1.5 text-white/30 hover:text-red-400 transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
 
-                    {/* Suggestion cards */}
-                    {suggestions.map((item, idx) => (
-                      <ParcelCard
-                        key={item.id}
-                        item={item}
-                        rank={idx + 1}
-                        isLocked={lockedParcel?.id === item.id}
-                        onLock={handleLockParcel}
-                      />
-                    ))}
+                    {/* Agent Suggestions Section */}
+                    {suggestions.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="px-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400/70 pt-2">Agent Suggestions</p>
+                        {/* Locked parcel banner */}
+                        {lockedParcel && (
+                          <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-3 py-2 text-xs text-indigo-300 mb-1">
+                            <Lock className="w-3.5 h-3.5" />
+                            Parcel #{suggestions.findIndex((s) => s.id === lockedParcel.id) + 1} selected
+                            <button
+                              onClick={() => setLockedParcel(null)}
+                              className="ml-auto text-indigo-400/60 hover:text-indigo-300 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+
+                        {suggestions.map((item, idx) => (
+                          <ParcelCard
+                            key={item.id}
+                            item={item}
+                            rank={idx + 1}
+                            isLocked={lockedParcel?.id === item.id}
+                            onLock={handleLockParcel}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
