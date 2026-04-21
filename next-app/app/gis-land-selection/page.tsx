@@ -164,17 +164,18 @@ export default function GisLandSelectionPage() {
   const handlePolygonChange = useCallback((feature: GeoJSON.Feature | null) => {
     if (!feature) {
       setSelectedPolygon(null);
+      mapRef.current?.dispatchMapEvent({ type: "clearFitValidation", payload: {} });
       return;
     }
     const coords = (feature.geometry as { coordinates: [number, number][][] }).coordinates?.[0];
     if (!coords?.length) return;
 
     // Rough area (Shoelace in degrees → m²)
-    let area = 0;
+    let areaVal = 0;
     for (let i = 0; i < coords.length - 1; i++) {
-      area += coords[i][0] * coords[i + 1][1] - coords[i + 1][0] * coords[i][1];
+      areaVal += coords[i][0] * coords[i + 1][1] - coords[i + 1][0] * coords[i][1];
     }
-    const areaM2 = Math.abs(area / 2) * 111_000 * 111_000;
+    const areaM2 = Math.abs(areaVal / 2) * 111_000 * 111_000;
 
     const centroid: [number, number] = [
       coords.reduce((s, c) => s + c[0], 0) / coords.length,
@@ -182,7 +183,19 @@ export default function GisLandSelectionPage() {
     ];
 
     setSelectedPolygon({ areaSqm: areaM2, centroid, geojson: feature });
-  }, []);
+
+    if (currentGlbUrl) {
+      mapRef.current?.dispatchMapEvent({
+        type: "loadModel",
+        payload: {
+          glbUrl: currentGlbUrl,
+          center: centroid,
+          rotation: rotationDeg
+        }
+      });
+    }
+  }, [currentGlbUrl, rotationDeg]);
+
 
   // ── Lock a parcel ────────────────────────────────────────────────────
   const handleLockParcel = useCallback(
@@ -241,7 +254,11 @@ export default function GisLandSelectionPage() {
     setSelectedPolygon(null);
     setShowSuggestionsPanel(false);
     setFitResult(null);
+    setCurrentGlbUrl(null);
+    setModelFileName(null);
+    setModelDimensions(null);
   }, []);
+
 
   const detectModelDimensions = useCallback(async (buffer: ArrayBuffer): Promise<ModelDimensions> => {
     const [{ GLTFLoader }, THREE] = await Promise.all([
