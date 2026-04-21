@@ -428,6 +428,7 @@ export default function GisLandSelectionPage() {
             token: token,
             modelWidthM: dims.width_m,
             modelDepthM: dims.depth_m,
+            upAxis: dims.up_axis,
           }
         });
       }
@@ -497,6 +498,7 @@ export default function GisLandSelectionPage() {
         scale: 1,
         modelWidthM: BACKEND_TEST_MODEL_DIMS.width_m,
         modelDepthM: BACKEND_TEST_MODEL_DIMS.depth_m,
+        upAxis: BACKEND_TEST_MODEL_DIMS.up_axis,
       },
     });
   }, [selectedPolygon]);

@@ -33,10 +33,11 @@ def _build_query(bbox: BoundingBox, max_road: int, max_landuse: int, max_buildin
   way["highway"]({b});
   way["landuse"]({b});
   way["building"]({b});
-  way["natural"~"water|wood"]({b});
+  way["natural"~"water|wood|scrub|heath"]({b});
+  way["landuse"~"brownfield|greenfield|construction|vacant"]({b});
   relation["landuse"]({b});
   relation["building"]({b});
-  relation["natural"~"water|wood"]({b});
+  relation["natural"~"water|wood|scrub|heath"]({b});
   node["place"]({b});
 );
 out geom {max_road + max_landuse + max_buildings + 100};

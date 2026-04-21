@@ -79,6 +79,7 @@ export interface LoadModelPayload {
   token?: string;
   modelWidthM?: number;
   modelDepthM?: number;
+  upAxis?: "y" | "z";
 }
 
 export interface ShowFitValidationPayload {

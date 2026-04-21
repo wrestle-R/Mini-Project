@@ -201,6 +201,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
     widthM: number;
     depthM: number;
     scale: number;
+    upAxis: "y" | "z";
   } | null>(null);
   const modelInteractionRef = useRef({
     selected: false,
@@ -719,7 +720,8 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
     }
 
     if (typeof next.rotationX === "number") {
-      transform.rotateX = (Math.PI / 2) + (next.rotationX * Math.PI) / 180;
+      const baseRotationX = placement.upAxis === "z" ? Math.PI / 2 : 0;
+      transform.rotateX = baseRotationX + (next.rotationX * Math.PI) / 180;
     }
     if (typeof next.rotationY === "number") {
       transform.rotateY = (next.rotationY * Math.PI) / 180;
@@ -750,7 +752,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
     map.triggerRepaint();
   }, [updateModelFootprint]);
 
-  const set3DModel = useCallback((glbUrl: string | null, center: [number, number], rotation: number, scale: number = 1, token?: string, modelWidthM?: number, modelDepthM?: number) => {
+  const set3DModel = useCallback((glbUrl: string | null, center: [number, number], rotation: number, scale: number = 1, token?: string, modelWidthM?: number, modelDepthM?: number, upAxis: "y" | "z" = "y") => {
     const map = mapRef.current;
     if (!map) return;
 
@@ -796,7 +798,10 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
 
     const modelOrigin = center;
     const modelAltitude = 0;
-    const modelRotate = [Math.PI / 2, 0, (rotation * Math.PI) / 180];
+    // Base rotation: MapLibre expect Y-up. 
+    // If model is Z-up, we rotate 90 deg around X.
+    const baseRotationX = upAxis === "z" ? Math.PI / 2 : 0;
+    const modelRotate = [baseRotationX, 0, (rotation * Math.PI) / 180];
 
     const modelAsMercator = maplibregl.MercatorCoordinate.fromLngLat(
         modelOrigin,
@@ -821,6 +826,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
       widthM: effectiveWidth,
       depthM: effectiveDepth,
       scale,
+      upAxis,
     };
 
     // Update transform-only rotation without reloading the GLB.
@@ -960,15 +966,9 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
             });
 
             // MapLibre's model transform already rotates from model space into map
-            // space. Normalize every GLB to the Y-up convention expected by that
-            // transform. IFC-derived assets often arrive Z-up, while the backend
-            // diagnostic model is already Y-up.
-            const initialBox = new THREE.Box3().setFromObject(modelRoot);
-            const initialSize = initialBox.getSize(new THREE.Vector3());
-            if (initialSize.z > initialSize.y * 1.25) {
-              modelRoot.rotation.x = Math.PI / 2;
-              modelRoot.updateMatrixWorld(true);
-            }
+            // space. We now rely on the explicit upAxis passed from the detection logic.
+            // The initial rotation is already set in the transform.
+            modelRoot.updateMatrixWorld(true);
 
             // Normalize model pivot to center and sit on the ground plane.
             const normalizedBox = new THREE.Box3().setFromObject(modelRoot);
@@ -1290,7 +1290,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
               modelWidthM?: number;
               modelDepthM?: number;
             };
-            set3DModel(p.glbUrl, p.center, p.rotation, p.scale, p.token, p.modelWidthM, p.modelDepthM);
+            set3DModel(p.glbUrl, p.center, p.rotation, p.scale, p.token, p.modelWidthM, p.modelDepthM, p.upAxis);
             break;
           }
 

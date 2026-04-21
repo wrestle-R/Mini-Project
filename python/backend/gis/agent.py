@@ -186,7 +186,7 @@ async def get_suitable_regions(min_lat: float, min_lon: float, max_lat: float, m
     return json.dumps([c.model_dump() for c in candidates])
 
 
-TOOLS = [geocodePlace, regionToPolygon, getLandContext, get_suitable_regions]
+TOOLS = [geocodePlace, regionToPolygon, getLandContext, get_suitable_regions, rankCandidateParcels, suggestSkyscraperLand]
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +202,14 @@ class AgentState(TypedDict):
 # Graph nodes
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are the Spatial Intelligence Agent for InfraSaathi (India).
+SYSTEM_PROMPT = """You are the AI Spatial Intelligence Agent for InfraSaathi (India).
 Ground all responses in tool data. Use only available tools.
+
+SEARCH STRATEGY:
+1. Always start by geocoding the user's requested location if not already in context.
+2. If the user asks for "suitable spots", "construction land", or "good areas", use 'get_suitable_regions' or 'rankCandidateParcels'.
+3. If the user specifically asks for building-free/vacant land for large structures (like skyscrapers or factories), use 'suggestSkyscraperLand'.
+4. If a prompt mentions environmental context (e.g., "near a forest", "near water"), ensure you mention these in your explanation after using the tools.
 
 ACTION FORMAT:
 Return ONLY a JSON object:
@@ -212,7 +218,19 @@ Return ONLY a JSON object:
   "payload": {
     "geojson": <Feature>,
     "center": [lon, lat],
-    "candidates": [...]
+    "candidates": [
+       {
+         "id": "string",
+         "geometry": <Polygon>,
+         "score": float,
+         "reasons": ["string"],
+         "tags": {},
+         "area_sqm": float,
+         "centroid": [lon, lat],
+         "bbox": {"min_lon": f, "min_lat": f, "max_lon": f, "max_lat": f},
+         "confidence_label": "high"|"medium"|"low"
+       }
+    ]
   },
   "explanation": "Human summary",
   "follow_up": "Next step?"
@@ -415,7 +433,8 @@ async def run_agent(
     lower_msg = message.lower()
 
     # Deterministic fast-path for skyscraper empty-land queries.
-    if "skyscraper" in lower_msg and ("empty" in lower_msg or "vacant" in lower_msg or "free land" in lower_msg):
+    # Removed deterministic fast-path
+    if False:
         sqm_match = re.search(r"(\d[\d,\.]*)\s*(sqm|sq\.?m|m2|m\^2)", lower_msg)
         target_sqm = 5000.0
         if sqm_match:
