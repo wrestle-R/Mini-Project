@@ -19,6 +19,7 @@ interface ModelViewerProps {
   originalModelUrl?: string;
   displayMode?: "current" | "original" | "comparison";
   metadataUrl?: string;
+  authToken?: string | null;
   onElementSelect?: (element: ElementMetadata | null) => void;
 }
 
@@ -27,6 +28,7 @@ export default function ModelViewer({
   originalModelUrl,
   displayMode = "current",
   metadataUrl,
+  authToken,
   onElementSelect,
 }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,16 +50,15 @@ export default function ModelViewer({
   // Fetch metadata when URL changes
   useEffect(() => {
     if (!metadataUrl) return;
-    const metadataPath = metadataUrl.startsWith("http")
-      ? metadataUrl
-      : `http://localhost:8000${metadataUrl}`;
-    fetch(metadataPath)
+    fetch(metadataUrl, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+    })
       .then((res) => res.json())
       .then((data) => {
         metadataRef.current = data;
       })
       .catch((err) => console.error("Failed to load metadata:", err));
-  }, [metadataUrl]);
+  }, [metadataUrl, authToken]);
 
   // Initialize scene (only once)
   useEffect(() => {
@@ -299,12 +300,12 @@ export default function ModelViewer({
     }
 
     const loader = new GLTFLoader();
-    const fullUrl = url.startsWith("http")
-      ? url
-      : `http://localhost:8000${url}`;
+    if (authToken) {
+      loader.setRequestHeader({ Authorization: `Bearer ${authToken}` });
+    }
 
     loader.load(
-      fullUrl,
+      url,
       (gltf) => {
         const model = gltf.scene;
         if (isOriginal) {
@@ -410,7 +411,7 @@ export default function ModelViewer({
       },
       undefined,
       (error) => {
-        console.error(`Error loading GLB model (${fullUrl}):`, error);
+        console.error(`Error loading GLB model (${url}):`, error);
       }
     );
   };

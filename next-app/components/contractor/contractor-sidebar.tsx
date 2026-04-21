@@ -35,7 +35,7 @@ import {
 import { Building2, Sun, Moon, ChevronUp, LogOut, User } from "lucide-react";
 import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
 
-import { FiHome, FiFolder } from "react-icons/fi";
+import { FiHome, FiFolder, FiBox } from "react-icons/fi";
 
 /* ─────────────────── Component ─────────────────── */
 
@@ -108,6 +108,22 @@ export function ContractorSidebar() {
                   <Link href="/contractor/projects">
                     <FiFolder className="h-4 w-4 shrink-0" />
                     <span>Projects</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/contractor/ifc-viewer")}
+                  tooltip="IFC Studio"
+                  className={cn(
+                    isActive("/contractor/ifc-viewer") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/contractor/ifc-viewer">
+                    <FiBox className="h-4 w-4 shrink-0" />
+                    <span>IFC Studio</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
