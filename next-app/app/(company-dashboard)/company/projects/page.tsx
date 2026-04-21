@@ -89,6 +89,36 @@ export default function CompanyProjectsPage() {
     fetchProjects();
   }, [fetchProjects]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const rawDraft = localStorage.getItem("gis_report_project_draft");
+    if (!rawDraft) return;
+
+    try {
+      const draft = JSON.parse(rawDraft) as Partial<ProjectForm> & { source?: Record<string, unknown> };
+      if (draft.title || draft.description || draft.location) {
+        setForm((prev) => ({
+          ...prev,
+          title: draft.title || prev.title,
+          description: draft.description || prev.description,
+          location: {
+            displayName: draft.location?.displayName || prev.location.displayName,
+            lat: typeof draft.location?.lat === "number" ? draft.location.lat : prev.location.lat,
+            lng: typeof draft.location?.lng === "number" ? draft.location.lng : prev.location.lng,
+          },
+          budget: draft.budget || prev.budget,
+        }));
+        setShowForm(true);
+        toast.success("Loaded project draft from GIS report");
+      }
+    } catch {
+      // Ignore malformed drafts and keep the normal projects view.
+    } finally {
+      localStorage.removeItem("gis_report_project_draft");
+    }
+  }, []);
+
   const handleCreate = async () => {
     if (!token || !form.title.trim()) {
       toast.error("Title is required");

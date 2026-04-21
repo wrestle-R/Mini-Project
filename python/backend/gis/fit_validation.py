@@ -31,6 +31,30 @@ EARTH_RADIUS_M = 6_371_000.0
 EPSILON_M2 = 1e-4
 
 
+def _extract_geojson_geometry(geojson_obj: dict) -> dict:
+    """Accept Geometry/Feature/FeatureCollection and return a Geometry mapping."""
+    if not isinstance(geojson_obj, dict):
+        raise ValueError("GeoJSON payload must be an object")
+
+    gj_type = geojson_obj.get("type")
+    if gj_type == "Feature":
+        geom = geojson_obj.get("geometry")
+        if not isinstance(geom, dict):
+            raise ValueError("GeoJSON Feature must include a valid geometry")
+        return geom
+
+    if gj_type == "FeatureCollection":
+        features = geojson_obj.get("features")
+        if not isinstance(features, list) or not features:
+            raise ValueError("GeoJSON FeatureCollection must contain at least one feature")
+        first = features[0]
+        if not isinstance(first, dict) or not isinstance(first.get("geometry"), dict):
+            raise ValueError("GeoJSON FeatureCollection has an invalid first feature geometry")
+        return first["geometry"]
+
+    return geojson_obj
+
+
 def _to_local_xy(lon: float, lat: float, origin_lon: float, origin_lat: float) -> tuple[float, float]:
     lon_rad = math.radians(lon)
     lat_rad = math.radians(lat)
@@ -84,7 +108,8 @@ def _geom_local_to_geojson(
 
 
 def _land_polygon_from_geojson(req: FitValidationRequest) -> tuple[Polygon, float, float]:
-    land_shape = shape(req.land_geojson)
+    land_geom = _extract_geojson_geometry(req.land_geojson)
+    land_shape = shape(land_geom)
     if land_shape.is_empty:
         raise ValueError("Selected land polygon is empty")
 
@@ -108,9 +133,9 @@ def _land_polygon_from_geojson(req: FitValidationRequest) -> tuple[Polygon, floa
             polys.append(Polygon(shell, holes).buffer(0))
         poly = MultiPolygon(polys).buffer(0)
 
-    from shapely.validation import make_valid
-    poly = make_valid(poly)
-
+    # shapely make_valid can sometimes fail depending on version, buffer(0) is a safer fallback
+    poly = poly.buffer(0)
+    
     if poly.is_empty:
         raise ValueError("Selected land polygon becomes invalid after projection")
 
@@ -212,7 +237,8 @@ def _optimize_rotation(land_poly: Polygon | MultiPolygon, width_m: float, depth_
 
 
 async def _road_distance_m(land_geojson: dict, origin_lon: float, origin_lat: float, road_warning_distance_m: float) -> RoadAccessResult:
-    land_shape_ll = shape(land_geojson)
+    land_geom = _extract_geojson_geometry(land_geojson)
+    land_shape_ll = shape(land_geom)
     min_lon, min_lat, max_lon, max_lat = land_shape_ll.bounds
     pad = 0.01
     bbox = BoundingBox(
@@ -221,7 +247,17 @@ async def _road_distance_m(land_geojson: dict, origin_lon: float, origin_lat: fl
         max_lon=max_lon + pad,
         max_lat=max_lat + pad,
     )
-    osm = await fetch_osm_context(bbox=bbox, max_road_results=400, max_landuse_results=60)
+    try:
+        osm = await fetch_osm_context(bbox=bbox, max_road_results=400, max_landuse_results=60)
+    except Exception as exc:
+        return RoadAccessResult(
+            nearest_road_distance_m=None,
+            has_road_access=False,
+            warning=(
+                "Road accessibility check is temporarily unavailable because OSM data "
+                f"could not be fetched ({exc.__class__.__name__})."
+            ),
+        )
 
     if not osm.roads:
         return RoadAccessResult(
@@ -280,6 +316,113 @@ async def _road_distance_m(land_geojson: dict, origin_lon: float, origin_lat: fl
     warning = None if has_access else (
         f"No nearby road access: nearest known road is {min_distance:.1f} m away "
         f"(threshold {road_warning_distance_m:.1f} m)."
+    )
+    return RoadAccessResult(
+        nearest_road_distance_m=round(min_distance, 2),
+        has_road_access=has_access,
+        warning=warning,
+    )
+
+
+async def _building_distance_m(
+    land_geojson: dict,
+    origin_lon: float,
+    origin_lat: float,
+    nearby_building_distance_m: float,
+) -> RoadAccessResult:
+    land_geom = _extract_geojson_geometry(land_geojson)
+    land_shape_ll = shape(land_geom)
+    min_lon, min_lat, max_lon, max_lat = land_shape_ll.bounds
+    pad = 0.01
+    bbox = BoundingBox(
+        min_lon=min_lon - pad,
+        min_lat=min_lat - pad,
+        max_lon=max_lon + pad,
+        max_lat=max_lat + pad,
+    )
+    try:
+        osm = await fetch_osm_context(bbox=bbox, max_road_results=20, max_landuse_results=20, max_building_results=400)
+    except Exception as exc:
+        return RoadAccessResult(
+            nearest_road_distance_m=None,
+            has_road_access=False,
+            warning=(
+                "Nearby building check is temporarily unavailable because OSM data "
+                f"could not be fetched ({exc.__class__.__name__})."
+            ),
+        )
+
+    if not osm.buildings:
+        return RoadAccessResult(
+            nearest_road_distance_m=None,
+            has_road_access=False,
+            warning=f"No nearby OSM building features found within search window (~{pad} degrees).",
+        )
+
+    def project_coords(coords: list[list[float]]) -> list[tuple[float, float]]:
+        return [_to_local_xy(c[0], c[1], origin_lon, origin_lat) for c in coords]
+
+    if isinstance(land_shape_ll, Polygon):
+        shell = [_to_local_xy(p[0], p[1], origin_lon, origin_lat) for p in land_shape_ll.exterior.coords]
+        holes = [[_to_local_xy(p[0], p[1], origin_lon, origin_lat) for p in h.coords] for h in land_shape_ll.interiors]
+        land_poly_local: Polygon | MultiPolygon = Polygon(shell, holes).buffer(0)
+    elif isinstance(land_shape_ll, MultiPolygon):
+        polys = []
+        for p in land_shape_ll.geoms:
+            shell = [_to_local_xy(c[0], c[1], origin_lon, origin_lat) for c in p.exterior.coords]
+            holes = [[_to_local_xy(c[0], c[1], origin_lon, origin_lat) for c in h.coords] for h in p.interiors]
+            polys.append(Polygon(shell, holes).buffer(0))
+        land_poly_local = MultiPolygon(polys).buffer(0)
+    else:
+        return RoadAccessResult(
+            nearest_road_distance_m=None,
+            has_road_access=False,
+            warning="Land geometry is not polygonal for nearby-building check.",
+        )
+
+    min_distance = float("inf")
+    for building in osm.buildings:
+        geom = building.geometry
+        if not geom:
+            continue
+        geom_type = geom.get("type")
+        if geom_type == "Polygon":
+            rings = geom.get("coordinates", [])
+            if not rings:
+                continue
+            shell = project_coords(rings[0])
+            holes = [project_coords(ring) for ring in rings[1:]]
+            building_poly = Polygon(shell, holes).buffer(0)
+            min_distance = min(min_distance, building_poly.distance(land_poly_local))
+        elif geom_type == "MultiPolygon":
+            for polygon_coords in geom.get("coordinates", []):
+                if not polygon_coords:
+                    continue
+                shell = project_coords(polygon_coords[0])
+                holes = [project_coords(ring) for ring in polygon_coords[1:]]
+                building_poly = Polygon(shell, holes).buffer(0)
+                min_distance = min(min_distance, building_poly.distance(land_poly_local))
+        elif geom_type == "LineString":
+            pts = project_coords(geom.get("coordinates", []))
+            if len(pts) >= 2:
+                min_distance = min(min_distance, LineString(pts).distance(land_poly_local))
+        elif geom_type == "Point":
+            coords = geom.get("coordinates")
+            if isinstance(coords, list) and len(coords) == 2:
+                p = Point(_to_local_xy(coords[0], coords[1], origin_lon, origin_lat))
+                min_distance = min(min_distance, p.distance(land_poly_local))
+
+    if math.isinf(min_distance):
+        return RoadAccessResult(
+            nearest_road_distance_m=None,
+            has_road_access=False,
+            warning="OSM buildings were returned but no valid geometry could be measured.",
+        )
+
+    has_access = min_distance <= nearby_building_distance_m
+    warning = None if has_access else (
+        f"No nearby building context: nearest known building is {min_distance:.1f} m away "
+        f"(threshold {nearby_building_distance_m:.1f} m)."
     )
     return RoadAccessResult(
         nearest_road_distance_m=round(min_distance, 2),
@@ -353,6 +496,12 @@ async def validate_fit(req: FitValidationRequest) -> FitValidationResult:
         origin_lat=origin_lat,
         road_warning_distance_m=req.road_warning_distance_m,
     )
+    nearby_building_access = await _building_distance_m(
+        land_geojson=req.land_geojson,
+        origin_lon=origin_lon,
+        origin_lat=origin_lat,
+        nearby_building_distance_m=req.nearby_building_distance_m,
+    )
 
     messages: list[str] = []
     if fit_status == "valid":
@@ -377,6 +526,9 @@ async def validate_fit(req: FitValidationRequest) -> FitValidationResult:
     if road_access.warning:
         messages.append(road_access.warning)
 
+    if nearby_building_access.warning:
+        messages.append(nearby_building_access.warning)
+
     if req.optimize_rotation:
         delta = (suggested_rotation - req.rotation_deg + 360.0) % 360.0
         if delta > 180:
@@ -398,6 +550,7 @@ async def validate_fit(req: FitValidationRequest) -> FitValidationResult:
         overflow_distance_m=round(overflow_distance, 2),
         suggested_rotation_deg=round(suggested_rotation, 2),
         road_access=road_access,
+        nearby_building_access=nearby_building_access,
         inside_geometry=inside_geojson,
         overflow_geometry=overflow_geojson,
         messages=messages,

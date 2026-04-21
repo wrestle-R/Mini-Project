@@ -1,4 +1,4 @@
-import { MapPin, Route, Layers, TrendingUp, Lock, CheckCircle2 } from "lucide-react";
+import { MapPin, Route, Layers, TrendingUp, Lock, CheckCircle2, Navigation } from "lucide-react";
 import type { SuggestionItem } from "./types";
 
 const CONFIDENCE_STYLES: Record<
@@ -30,12 +30,16 @@ interface ParcelCardProps {
   rank: number;
   isLocked?: boolean;
   onLock?: (item: SuggestionItem) => void;
+  onFlyTo?: (item: SuggestionItem) => void;
 }
 
-export default function ParcelCard({ item, rank, isLocked, onLock }: ParcelCardProps) {
-  const styles = CONFIDENCE_STYLES[item.confidence_label] ?? CONFIDENCE_STYLES.low;
-  const scorePercent = Math.round(item.score * 100);
-  const areaHa = (item.area_sqm / 10_000).toFixed(2);
+export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: ParcelCardProps) {
+  const normalizedConfidence = (item.confidence_label || (item.score >= 0.65 ? "high" : item.score >= 0.4 ? "medium" : "low")).toLowerCase();
+  const styles = CONFIDENCE_STYLES[normalizedConfidence] ?? CONFIDENCE_STYLES.low;
+  const scorePercent = Math.round((item.score ?? 0) * 100);
+  const areaHa = ((item.area_sqm ?? 0) / 10_000).toFixed(2);
+  const roadDistance = item.tags?.roadDistance ?? 0;
+  const urbanity = item.tags?.urbanity ?? "unknown";
 
   return (
     <div
@@ -56,29 +60,38 @@ export default function ParcelCard({ item, rank, isLocked, onLock }: ParcelCardP
           <span
             className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${styles.badge}`}
           >
-            {item.confidence_label.toUpperCase()} · {scorePercent}%
+            {normalizedConfidence.toUpperCase()} · {scorePercent}%
           </span>
         </div>
 
-        {/* Lock button */}
-        <button
-          onClick={() => onLock?.(item)}
-          title={isLocked ? "Parcel selected" : "Lock this parcel"}
-          className={`
-            w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 flex-none
-            ${
-              isLocked
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
-                : "bg-white/5 text-white/30 hover:bg-indigo-500/20 hover:text-indigo-400"
-            }
-          `}
-        >
-          {isLocked ? (
-            <CheckCircle2 className="w-3.5 h-3.5" />
-          ) : (
-            <Lock className="w-3 h-3" />
-          )}
-        </button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onFlyTo?.(item)}
+            title="Fly to location"
+            className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60 transition-all duration-150"
+          >
+            <Navigation className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => onLock?.(item)}
+            title={isLocked ? "Parcel selected" : "Lock this parcel"}
+            className={`
+              w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 flex-none
+              ${
+                isLocked
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
+                  : "bg-white/5 text-white/30 hover:bg-indigo-500/20 hover:text-indigo-400"
+              }
+            `}
+          >
+            {isLocked ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <Lock className="w-3 h-3" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* ── Score bar ─────────────────────────────────────────────── */}
@@ -96,20 +109,18 @@ export default function ParcelCard({ item, rank, isLocked, onLock }: ParcelCardP
         </span>
         <span className="flex items-center gap-1">
           <Route className="w-3 h-3" />
-          {item.tags.roadDistance < 1000
-            ? `${Math.round(item.tags.roadDistance)} m`
-            : `${(item.tags.roadDistance / 1000).toFixed(1)} km`}{" "}
+          {roadDistance < 1000 ? `${Math.round(roadDistance)} m` : `${(roadDistance / 1000).toFixed(1)} km`} {" "}
           to road
         </span>
         <span className="flex items-center gap-1">
           <MapPin className="w-3 h-3" />
-          {item.tags.urbanity}
+          {urbanity}
         </span>
       </div>
 
       {/* ── Reasons ───────────────────────────────────────────────── */}
       <ul className="space-y-1">
-        {item.reasons.slice(0, 2).map((reason, i) => (
+        {(item.reasons || []).slice(0, 2).map((reason, i) => (
           <li key={i} className="flex items-start gap-1.5 text-[11px] text-white/55 leading-snug">
             <TrendingUp className="w-3 h-3 text-white/20 flex-none mt-0.5" />
             {reason}

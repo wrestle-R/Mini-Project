@@ -321,6 +321,56 @@ def route_after_summarize(state: AgentState) -> str:
     return END
 
 
+def _first_polygon_feature(geojson_obj: Any) -> Optional[dict]:
+    if not isinstance(geojson_obj, dict):
+        return None
+
+    gj_type = geojson_obj.get("type")
+    if gj_type == "FeatureCollection":
+        for feature in geojson_obj.get("features", []):
+            normalized = _first_polygon_feature(feature)
+            if normalized:
+                return normalized
+        return None
+
+    if gj_type == "Feature":
+        geom = geojson_obj.get("geometry")
+        if isinstance(geom, dict) and geom.get("type") in {"Polygon", "MultiPolygon"}:
+            return geojson_obj
+        return None
+
+    if gj_type in {"Polygon", "MultiPolygon"}:
+        return {"type": "Feature", "geometry": geojson_obj, "properties": {}}
+
+    return None
+
+
+def _normalize_chat_action_payload(data: dict) -> dict:
+    payload = data.get("payload")
+    if not isinstance(payload, dict):
+        return data
+
+    if data.get("action_type") == "drawPolygon":
+        geojson = payload.get("geojson") or payload.get("feature") or payload.get("geometry")
+        polygon_feature = _first_polygon_feature(geojson)
+        if polygon_feature:
+            payload["geojson"] = polygon_feature
+            payload.pop("feature", None)
+            payload.pop("geometry", None)
+
+    if data.get("action_type") == "suggestAreas":
+        candidates = payload.get("candidates")
+        if isinstance(candidates, list):
+            for candidate in candidates:
+                if not isinstance(candidate, dict):
+                    continue
+                feature = _first_polygon_feature(candidate.get("geometry"))
+                if feature:
+                    candidate["geometry"] = feature["geometry"]
+
+    return data
+
+
 # ---------------------------------------------------------------------------
 # Build graph
 # ---------------------------------------------------------------------------
@@ -463,6 +513,7 @@ async def run_agent(
 
     try:
         data = json.loads(raw)
+        data = _normalize_chat_action_payload(data)
         return ChatActionEvent(**data)
     except Exception:
         # Fallback: conversational response with no map action

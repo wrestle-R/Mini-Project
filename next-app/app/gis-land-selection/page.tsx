@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useRef, useState, useCallback, useEffect } from "react";
 import {
   Map,
@@ -11,12 +12,11 @@ import {
   ChevronRight,
   Globe2,
   Layers2,
-  Upload,
-  RotateCw,
   CheckCircle2,
   AlertTriangle,
   MapPin,
 } from "lucide-react";
+import type { Object3D } from "three";
 import type { GisMapHandle } from "@/components/gis/GisMap";
 import type { MapEvent, SuggestionItem } from "@/components/gis/types";
 import ParcelCard from "@/components/gis/ParcelCard";
@@ -31,12 +31,25 @@ interface SessionSummary {
   id: string;
   title: string;
   currentGlbUrl: string;
+  currentVersionNumber: number;
+  workflowState?: string;
+  currentValidationSnapshotId?: string | null;
+  currentReportId?: string | null;
 }
 
 interface SelectedParcelInfo {
   areaSqm: number;
   centroid: [number, number];
-  geojson: GeoJSON.Feature;
+  geojson: GeoJSON.Feature & { geometry: GeoJSON.Polygon };
+}
+
+interface SavedParcel {
+  id: string;
+  name: string;
+  coordinates: [number, number][];
+  centroid: [number, number];
+  area: number;
+  geojson: GeoJSON.Feature & { geometry: GeoJSON.Polygon };
 }
 
 interface ModelDimensions {
@@ -63,18 +76,40 @@ interface FitValidationResult {
     has_road_access: boolean;
     warning?: string | null;
   };
+  nearby_building_access: {
+    nearest_road_distance_m: number | null;
+    has_road_access: boolean;
+    warning?: string | null;
+  };
   inside_geometry?: GeoJSON.Geometry | null;
   overflow_geometry?: GeoJSON.Geometry | null;
   messages: string[];
 }
 
 const GIS_BACKEND = "http://localhost:8000";
+const BACKEND_TEST_MODEL_URL = `${GIS_BACKEND}/data/glb/diagnostic_backend_model.glb`;
+const DEFAULT_MODEL_ROTATION_DEG = 90;
+const BACKEND_TEST_MODEL_DIMS: ModelDimensions = {
+  width_m: 18,
+  depth_m: 8,
+  height_m: 8,
+  up_axis: "y",
+};
+const EARTH_RADIUS_M = 6_371_000;
+
+function offsetLonLat(center: [number, number], offsetXM: number, offsetYM: number): [number, number] {
+  const latRad = (center[1] * Math.PI) / 180;
+  const nextLon = center[0] + (offsetXM / (EARTH_RADIUS_M * Math.cos(latRad))) * (180 / Math.PI);
+  const nextLat = center[1] + (offsetYM / EARTH_RADIUS_M) * (180 / Math.PI);
+  return [nextLon, nextLat];
+}
 
 export default function GisLandSelectionPage() {
   const { token } = useContractor();
+  const router = useRouter();
   const mapRef = useRef<GisMapHandle>(null);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
-  const [parcels, setParcels] = useState<any[]>([]); // Saved parcels
+  const [parcels, setParcels] = useState<SavedParcel[]>([]);
   const [lockedParcel, setLockedParcel] = useState<SuggestionItem | null>(null);
   const [selectedPolygon, setSelectedPolygon] = useState<SelectedParcelInfo | null>(null);
   const [rightPanel, setRightPanel] = useState<"chat" | "parcels">("chat");
@@ -84,11 +119,28 @@ export default function GisLandSelectionPage() {
   const [loadingModel, setLoadingModel] = useState(false);
   const [modelFileName, setModelFileName] = useState<string | null>(null);
   const [modelDimensions, setModelDimensions] = useState<ModelDimensions | null>(null);
-  const [rotationDeg, setRotationDeg] = useState(0);
-  const [roadWarningDistanceM, setRoadWarningDistanceM] = useState(50);
+  const [rotationXDeg, setRotationXDeg] = useState(270);
+  const [rotationYDeg, setRotationYDeg] = useState(0);
+  const [rotationDeg, setRotationDeg] = useState(DEFAULT_MODEL_ROTATION_DEG);
+  const [modelOffsetXM, setModelOffsetXM] = useState(0);
+  const [modelOffsetYM, setModelOffsetYM] = useState(0);
+  const [modelScale, setModelScale] = useState(1);
+  const roadWarningDistanceM = 50;
+  const nearbyBuildingDistanceM = 50;
   const [validatingFit, setValidatingFit] = useState(false);
   const [fitResult, setFitResult] = useState<FitValidationResult | null>(null);
   const [currentGlbUrl, setCurrentGlbUrl] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState<SessionSummary | null>(null);
+  const [validationSnapshotId, setValidationSnapshotId] = useState<string | null>(null);
+  const [reportSummary, setReportSummary] = useState<{
+    id: string;
+    versionNumber: number;
+    elementCounts: Record<string, number>;
+    estimatedDurationDays: number;
+    workerMix: { role: string; count: number }[];
+  } | null>(null);
+  const [completingValidation, setCompletingValidation] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Load parcels from localStorage
   useEffect(() => {
@@ -123,7 +175,7 @@ export default function GisLandSelectionPage() {
   }, [token]);
 
   // Save parcels to localStorage
-  const saveParcels = useCallback((newParcels: any[]) => {
+  const saveParcels = useCallback((newParcels: SavedParcel[]) => {
     setParcels(newParcels);
     localStorage.setItem("gis_saved_parcels", JSON.stringify(newParcels));
   }, []);
@@ -133,7 +185,9 @@ export default function GisLandSelectionPage() {
     const newParcel = {
       id: crypto.randomUUID(),
       name: `Parcel ${parcels.length + 1}`,
-      coordinates: (selectedPolygon.geojson.geometry as any).coordinates[0],
+      coordinates: selectedPolygon.geojson.geometry.coordinates[0].map(
+        (point) => [point[0], point[1]] as [number, number]
+      ),
       centroid: selectedPolygon.centroid,
       area: selectedPolygon.areaSqm,
       geojson: selectedPolygon.geojson,
@@ -164,10 +218,14 @@ export default function GisLandSelectionPage() {
   const handlePolygonChange = useCallback((feature: GeoJSON.Feature | null) => {
     if (!feature) {
       setSelectedPolygon(null);
+      setFitResult(null);
+      setValidationSnapshotId(null);
+      setReportSummary(null);
       mapRef.current?.dispatchMapEvent({ type: "clearFitValidation", payload: {} });
       return;
     }
-    const coords = (feature.geometry as { coordinates: [number, number][][] }).coordinates?.[0];
+    if (feature.geometry.type !== "Polygon") return;
+    const coords = feature.geometry.coordinates?.[0];
     if (!coords?.length) return;
 
     // Rough area (Shoelace in degrees → m²)
@@ -182,19 +240,27 @@ export default function GisLandSelectionPage() {
       coords.reduce((s, c) => s + c[1], 0) / coords.length,
     ];
 
-    setSelectedPolygon({ areaSqm: areaM2, centroid, geojson: feature });
+    setSelectedPolygon({ areaSqm: areaM2, centroid, geojson: feature as GeoJSON.Feature & { geometry: GeoJSON.Polygon } });
+    setFitResult(null);
+    setValidationSnapshotId(null);
+    setReportSummary(null);
+    mapRef.current?.dispatchMapEvent({ type: "clearFitValidation", payload: {} });
 
     if (currentGlbUrl) {
       mapRef.current?.dispatchMapEvent({
         type: "loadModel",
         payload: {
           glbUrl: currentGlbUrl,
-          center: centroid,
-          rotation: rotationDeg
+          center: offsetLonLat(centroid, modelOffsetXM, modelOffsetYM),
+          rotation: rotationDeg,
+          scale: modelScale,
+          token: token,
+          modelWidthM: modelDimensions ? modelDimensions.width_m * modelScale : undefined,
+          modelDepthM: modelDimensions ? modelDimensions.depth_m * modelScale : undefined,
         }
       });
     }
-  }, [currentGlbUrl, rotationDeg]);
+  }, [currentGlbUrl, rotationDeg, token, modelDimensions, modelOffsetXM, modelOffsetYM, modelScale]);
 
 
   // ── Lock a parcel ────────────────────────────────────────────────────
@@ -219,6 +285,14 @@ export default function GisLandSelectionPage() {
     },
     [lockedParcel]
   );
+
+  const handleFlyTo = useCallback((item: SuggestionItem) => {
+    if (!item.centroid) return;
+    mapRef.current?.dispatchMapEvent({
+      type: "flyTo",
+      payload: { center: item.centroid, zoom: 16 }
+    });
+  }, []);
 
   // ── Export selected polygon as GeoJSON ───────────────────────────────
   const handleExport = useCallback(() => {
@@ -254,9 +328,18 @@ export default function GisLandSelectionPage() {
     setSelectedPolygon(null);
     setShowSuggestionsPanel(false);
     setFitResult(null);
+    setSelectedSession(null);
+    setValidationSnapshotId(null);
+    setReportSummary(null);
     setCurrentGlbUrl(null);
     setModelFileName(null);
     setModelDimensions(null);
+    setRotationXDeg(0);
+    setRotationYDeg(0);
+    setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+    setModelOffsetXM(0);
+    setModelOffsetYM(0);
+    setModelScale(1);
   }, []);
 
 
@@ -267,7 +350,7 @@ export default function GisLandSelectionPage() {
     ]);
 
     const loader = new GLTFLoader();
-    const gltf = await new Promise<any>((resolve, reject) => {
+    const gltf = await new Promise<{ scene: Object3D }>((resolve, reject) => {
       loader.parse(buffer, "", resolve, reject);
     });
 
@@ -289,7 +372,21 @@ export default function GisLandSelectionPage() {
 
   const handleModelSelect = useCallback(async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const sessionId = e.target.value;
-    if (!sessionId) return;
+    if (!sessionId) {
+      setSelectedSession(null);
+      setModelFileName(null);
+      setModelDimensions(null);
+      setCurrentGlbUrl(null);
+      setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+      setModelOffsetXM(0);
+      setModelOffsetYM(0);
+      setModelScale(1);
+      setFitResult(null);
+      setValidationSnapshotId(null);
+      setReportSummary(null);
+      mapRef.current?.dispatchMapEvent({ type: "clearFitValidation", payload: { clear: true } });
+      return;
+    }
     
     const session = sessions.find(s => s.id === sessionId);
     if (!session || !session.currentGlbUrl || !token) return;
@@ -303,11 +400,21 @@ export default function GisLandSelectionPage() {
       
       const buffer = await res.arrayBuffer();
       const dims = await detectModelDimensions(buffer);
+      const loadRotation = DEFAULT_MODEL_ROTATION_DEG;
       
       setModelFileName(session.title);
       setModelDimensions(dims);
       setCurrentGlbUrl(session.currentGlbUrl);
+      setSelectedSession(session);
+      setRotationXDeg(270);
+      setRotationYDeg(0);
+      setRotationDeg(loadRotation);
+      setModelOffsetXM(0);
+      setModelOffsetYM(0);
+      setModelScale(1);
       setFitResult(null);
+      setValidationSnapshotId(session.currentValidationSnapshotId ?? null);
+      setReportSummary(null);
       mapRef.current?.dispatchMapEvent({ type: "clearFitValidation", payload: { clear: true } });
       
       if (selectedPolygon) {
@@ -316,8 +423,11 @@ export default function GisLandSelectionPage() {
           payload: {
             glbUrl: session.currentGlbUrl,
             center: selectedPolygon.centroid,
-            rotation: rotationDeg,
-            scale: 1
+            rotation: loadRotation,
+            scale: 1,
+            token: token,
+            modelWidthM: dims.width_m,
+            modelDepthM: dims.depth_m,
           }
         });
       }
@@ -327,11 +437,78 @@ export default function GisLandSelectionPage() {
     } finally {
       setLoadingModel(false);
     }
-  }, [sessions, detectModelDimensions, token]);
+  }, [sessions, detectModelDimensions, token, selectedPolygon]);
+
+  const applyModelPlacement = useCallback((next: {
+    offsetX?: number;
+    offsetY?: number;
+    scale?: number;
+    rotation?: number;
+    rotationX?: number;
+    rotationY?: number;
+    rotationZ?: number;
+    widthM?: number;
+    depthM?: number;
+  }) => {
+    if (!selectedPolygon || !modelDimensions) return;
+
+    const offsetX = next.offsetX ?? modelOffsetXM;
+    const offsetY = next.offsetY ?? modelOffsetYM;
+    const scale = next.scale ?? modelScale;
+    const rotation = next.rotationZ ?? next.rotation ?? rotationDeg;
+    const rotationX = next.rotationX ?? rotationXDeg;
+    const rotationY = next.rotationY ?? rotationYDeg;
+    const center = offsetLonLat(selectedPolygon.centroid, offsetX, offsetY);
+
+    mapRef.current?.updateModelTransform({
+      center,
+      rotationX,
+      rotationY,
+      rotationZ: rotation,
+      scale,
+      widthM: modelDimensions.width_m * scale,
+      depthM: modelDimensions.depth_m * scale,
+    });
+  }, [modelDimensions, modelOffsetXM, modelOffsetYM, modelScale, rotationDeg, rotationXDeg, rotationYDeg, selectedPolygon]);
+
+  const handleLoadBackendTestModel = useCallback(() => {
+    if (!selectedPolygon) return;
+
+    setModelFileName("Backend diagnostic GLB");
+    setModelDimensions(BACKEND_TEST_MODEL_DIMS);
+    setCurrentGlbUrl(BACKEND_TEST_MODEL_URL);
+    setSelectedSession(null);
+    setRotationXDeg(270);
+    setRotationYDeg(0);
+    setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+    setModelOffsetXM(0);
+    setModelOffsetYM(0);
+    setModelScale(1);
+    setFitResult(null);
+    setValidationSnapshotId(null);
+    setReportSummary(null);
+
+    mapRef.current?.dispatchMapEvent({
+      type: "loadModel",
+      payload: {
+        glbUrl: BACKEND_TEST_MODEL_URL,
+        center: selectedPolygon.centroid,
+        rotation: DEFAULT_MODEL_ROTATION_DEG,
+        scale: 1,
+        modelWidthM: BACKEND_TEST_MODEL_DIMS.width_m,
+        modelDepthM: BACKEND_TEST_MODEL_DIMS.depth_m,
+      },
+    });
+  }, [selectedPolygon]);
 
   const handleValidateFit = useCallback(async () => {
     const landFeature = selectedPolygon?.geojson ?? null;
     if (!landFeature || !modelDimensions || validatingFit) return;
+    const effectiveDimensions = {
+      width_m: modelDimensions.width_m * modelScale,
+      depth_m: modelDimensions.depth_m * modelScale,
+      height_m: modelDimensions.height_m * modelScale,
+    };
 
     setValidatingFit(true);
     try {
@@ -340,15 +517,14 @@ export default function GisLandSelectionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           land_geojson: landFeature,
-          model_dimensions: {
-            width_m: modelDimensions.width_m,
-            depth_m: modelDimensions.depth_m,
-            height_m: modelDimensions.height_m,
-          },
+          model_dimensions: effectiveDimensions,
           rotation_deg: rotationDeg,
           optimize_rotation: true,
           road_warning_distance_m: roadWarningDistanceM,
+          nearby_building_distance_m: nearbyBuildingDistanceM,
           area_unit: "sqm",
+          placement_offset_x_m: modelOffsetXM,
+          placement_offset_y_m: modelOffsetYM,
         }),
       });
       if (!res.ok) {
@@ -357,6 +533,8 @@ export default function GisLandSelectionPage() {
 
       const data = (await res.json()) as FitValidationResult;
       setFitResult(data);
+      setValidationSnapshotId(null);
+      setReportSummary(null);
       mapRef.current?.dispatchMapEvent({
         type: "showFitValidation",
         payload: {
@@ -371,7 +549,113 @@ export default function GisLandSelectionPage() {
     } finally {
       setValidatingFit(false);
     }
-  }, [selectedPolygon, modelDimensions, rotationDeg, roadWarningDistanceM, validatingFit]);
+  }, [selectedPolygon, modelDimensions, modelScale, rotationDeg, roadWarningDistanceM, nearbyBuildingDistanceM, modelOffsetXM, modelOffsetYM, validatingFit]);
+
+  const handleCompleteValidation = useCallback(async () => {
+    if (!token || !selectedSession || !selectedPolygon || !modelDimensions || !fitResult || completingValidation) return;
+
+    setCompletingValidation(true);
+    try {
+      const res = await fetch("/api/contractor/workflow/gis-completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sessionId: selectedSession.id,
+          ifcVersionNumber: selectedSession.currentVersionNumber,
+          parcelGeojson: selectedPolygon.geojson,
+          parcelSummary: {
+            areaSqm: selectedPolygon.areaSqm,
+            centroid: selectedPolygon.centroid,
+          },
+          modelDimensions,
+          rotationDeg,
+          roadWarningDistanceM,
+          fitResult,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Could not complete validation");
+
+      setValidationSnapshotId(data.validationSnapshot.id);
+      setSelectedSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              workflowState: data.workflow.state,
+              currentValidationSnapshotId: data.validationSnapshot.id,
+              currentReportId: null,
+            }
+          : prev
+      );
+      setReportSummary(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not complete validation");
+    } finally {
+      setCompletingValidation(false);
+    }
+  }, [
+    token,
+    selectedSession,
+    selectedPolygon,
+    modelDimensions,
+    fitResult,
+    completingValidation,
+    rotationDeg,
+    roadWarningDistanceM,
+  ]);
+
+  const handleGenerateReport = useCallback(async () => {
+    const workflowState = selectedSession?.workflowState || "draft";
+    const effectiveSnapshotId = validationSnapshotId || selectedSession?.currentValidationSnapshotId || null;
+    if (!token || !selectedSession || !effectiveSnapshotId || generatingReport) return;
+    if (workflowState !== "land_validated" && workflowState !== "report_generated") {
+      alert("Please complete the validation step before generating the report.");
+      return;
+    }
+
+    setGeneratingReport(true);
+    try {
+      const res = await fetch("/api/contractor/workflow/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sessionId: selectedSession.id,
+          validationSnapshotId: effectiveSnapshotId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Could not generate report");
+
+      const payload = data.report.payload;
+      setReportSummary({
+        id: data.report.id,
+        versionNumber: data.report.versionNumber,
+        elementCounts: payload.elementCounts || {},
+        estimatedDurationDays: payload.timeEstimate?.estimatedDurationDays || 0,
+        workerMix: payload.recommendedWorkerMix || [],
+      });
+      setSelectedSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              workflowState: data.workflow.state,
+              currentReportId: data.report.id,
+            }
+          : prev
+      );
+      router.push(`/gis-land-selection/report/${selectedSession.id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not generate report");
+    } finally {
+      setGeneratingReport(false);
+    }
+  }, [token, selectedSession, validationSnapshotId, generatingReport, router]);
 
   return (
     <div className="flex flex-col h-screen bg-[#080b12] overflow-hidden">
@@ -432,6 +716,12 @@ export default function GisLandSelectionPage() {
           <GisMap
             ref={mapRef}
             onPolygonChange={handlePolygonChange}
+            onModelRotationChange={(nextRotation) => {
+              setRotationDeg(nextRotation);
+              setFitResult(null);
+              setValidationSnapshotId(null);
+              setReportSummary(null);
+            }}
             className="absolute inset-0 rounded-none"
           />
 
@@ -471,15 +761,16 @@ export default function GisLandSelectionPage() {
         </div>
 
         {/* ── Right sidebar ────────────────────────────────────────── */}
-        <aside className="flex-none w-80 flex flex-col border-l border-white/8 bg-[#0a0d14] min-h-0">
-          <div className="flex-none border-b border-white/8 p-3 space-y-2.5">
+        <aside className="flex-none w-80 flex flex-col border-l border-white/8 bg-[#0a0d14] min-h-0 overflow-hidden">
+          <div className="flex-none border-b border-white/8 p-3 space-y-2.5 max-h-[36dvh] overflow-y-auto">
             <p className="text-[11px] uppercase tracking-wide text-white/35 font-semibold">Model Fit Validation</p>
             <div className="flex items-center gap-2">
               <select
+                suppressHydrationWarning
                 className="flex-1 text-[11px] px-2 py-2 rounded-lg border border-white/12 bg-white/5 text-white/70 hover:bg-white/10 transition-colors disabled:opacity-40"
                 onChange={handleModelSelect}
                 disabled={!selectedPolygon || fetchingSessions || loadingModel}
-                value={modelFileName ? sessions.find(s => s.title === modelFileName)?.id || "" : ""}
+                value={selectedSession?.id || ""}
               >
                 <option value="">Select saved 3D model...</option>
                 {sessions.map((s) => (
@@ -494,6 +785,14 @@ export default function GisLandSelectionPage() {
                 {validatingFit ? "Validating..." : "Validate"}
               </button>
             </div>
+            {selectedPolygon && (
+              <button
+                onClick={handleLoadBackendTestModel}
+                className="w-full text-xs px-3 py-2 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/25 transition-colors"
+              >
+                Load Backend Test Model
+              </button>
+            )}
             {!selectedPolygon && (
               <p className="text-[10px] text-amber-400/80 mt-1">
                 Please select or draw a land parcel first to load a model.
@@ -529,50 +828,150 @@ export default function GisLandSelectionPage() {
               </button>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-white/5 border border-white/10 rounded-lg p-2">
-                <p className="text-[10px] uppercase tracking-wide text-white/35 mb-1">Rotation</p>
-                <div className="flex items-center gap-2">
-                  <RotateCw className="w-3.5 h-3.5 text-white/35" />
+            <div className="bg-white/5 border border-white/10 rounded-lg p-2">
+              <p className="text-[10px] uppercase tracking-wide text-white/35 mb-2">Rotation X / Y / Z</p>
+              <div className="grid grid-cols-3 gap-2">
+                <label className="space-y-1">
+                  <span className="text-[10px] text-white/35">X°</span>
                   <input
-                    type="range"
+                    type="number"
+                    value={rotationXDeg}
+                    onChange={(e) => {
+                      const val = Number(e.target.value || 0);
+                      setRotationXDeg(val);
+                      setFitResult(null);
+                      setValidationSnapshotId(null);
+                      setReportSummary(null);
+                      applyModelPlacement({ rotationX: val });
+                    }}
+                    className="w-full bg-[#111827] border border-white/10 rounded px-2 py-1 text-[11px] text-white/75"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-white/35">Y°</span>
+                  <input
+                    type="number"
+                    value={rotationYDeg}
+                    onChange={(e) => {
+                      const val = Number(e.target.value || 0);
+                      setRotationYDeg(val);
+                      setFitResult(null);
+                      setValidationSnapshotId(null);
+                      setReportSummary(null);
+                      applyModelPlacement({ rotationY: val });
+                    }}
+                    className="w-full bg-[#111827] border border-white/10 rounded px-2 py-1 text-[11px] text-white/75"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-white/35">Z°</span>
+                  <input
+                    type="number"
                     min={0}
                     max={360}
                     value={rotationDeg}
                     onChange={(e) => {
-                      const val = Number(e.target.value);
+                      const val = Number(e.target.value || 0);
                       setRotationDeg(val);
-                      if (currentGlbUrl && selectedPolygon) {
-                        mapRef.current?.dispatchMapEvent({
-                          type: "loadModel",
-                          payload: {
-                            glbUrl: currentGlbUrl,
-                            center: selectedPolygon.centroid,
-                            rotation: val
-                          }
-                        });
-                      }
+                      setFitResult(null);
+                      setValidationSnapshotId(null);
+                      setReportSummary(null);
+                      applyModelPlacement({ rotationZ: val });
                     }}
-                    className="w-full"
+                    className="w-full bg-[#111827] border border-white/10 rounded px-2 py-1 text-[11px] text-white/75"
                   />
-                </div>
-                <p className="text-[11px] text-white/60 mt-1">{rotationDeg.toFixed(0)}°</p>
-              </div>
-
-              <div className="bg-white/5 border border-white/10 rounded-lg p-2">
-                <p className="text-[10px] uppercase tracking-wide text-white/35 mb-1">Road Threshold</p>
-                <input
-                  suppressHydrationWarning
-                  type="number"
-                  min={10}
-                  max={500}
-                  value={roadWarningDistanceM}
-                  onChange={(e) => setRoadWarningDistanceM(Number(e.target.value || 50))}
-                  className="w-full bg-[#111827] border border-white/10 rounded px-2 py-1 text-[11px] text-white/75"
-                />
-                <p className="text-[11px] text-white/60 mt-1">meters</p>
+                </label>
               </div>
             </div>
+
+            {modelFileName && modelDimensions && selectedPolygon && (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wide text-white/35 font-semibold">Model Placement</p>
+                  <button
+                    onClick={() => {
+                      setModelOffsetXM(0);
+                      setModelOffsetYM(0);
+                      setModelScale(1);
+                      setRotationXDeg(270);
+                      setRotationYDeg(0);
+                      setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+                      setFitResult(null);
+                      setValidationSnapshotId(null);
+                      setReportSummary(null);
+                      applyModelPlacement({
+                        offsetX: 0,
+                        offsetY: 0,
+                        scale: 1,
+                        rotationX: 270,
+                        rotationY: 0,
+                        rotationZ: DEFAULT_MODEL_ROTATION_DEG,
+                      });
+                    }}
+                    className="text-[10px] text-white/45 hover:text-white/80"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <p className="text-[10px] text-white/45">Drag model to rotate. Hold Shift and drag to move.</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <label className="space-y-1">
+                    <span className="text-[10px] text-white/35">X m</span>
+                    <input
+                      type="number"
+                      value={modelOffsetXM}
+                      onChange={(e) => {
+                        const val = Number(e.target.value || 0);
+                        setModelOffsetXM(val);
+                        setFitResult(null);
+                        setValidationSnapshotId(null);
+                        setReportSummary(null);
+                        applyModelPlacement({ offsetX: val });
+                      }}
+                      className="w-full bg-[#111827] border border-white/10 rounded px-2 py-1 text-[11px] text-white/75"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[10px] text-white/35">Y m</span>
+                    <input
+                      type="number"
+                      value={modelOffsetYM}
+                      onChange={(e) => {
+                        const val = Number(e.target.value || 0);
+                        setModelOffsetYM(val);
+                        setFitResult(null);
+                        setValidationSnapshotId(null);
+                        setReportSummary(null);
+                        applyModelPlacement({ offsetY: val });
+                      }}
+                      className="w-full bg-[#111827] border border-white/10 rounded px-2 py-1 text-[11px] text-white/75"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[10px] text-white/35">Scale</span>
+                    <input
+                      type="number"
+                      min={0.05}
+                      step={0.05}
+                      value={modelScale}
+                      onChange={(e) => {
+                        const val = Math.max(0.05, Number(e.target.value || 1));
+                        setModelScale(val);
+                        setFitResult(null);
+                        setValidationSnapshotId(null);
+                        setReportSummary(null);
+                        applyModelPlacement({
+                          scale: val,
+                          widthM: modelDimensions.width_m * val,
+                          depthM: modelDimensions.depth_m * val,
+                        });
+                      }}
+                      className="w-full bg-[#111827] border border-white/10 rounded px-2 py-1 text-[11px] text-white/75"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
 
             {fitResult && (
               <div className={`rounded-lg p-2.5 border ${
@@ -600,7 +999,54 @@ export default function GisLandSelectionPage() {
                   <span>
                     Road: {fitResult.road_access.nearest_road_distance_m == null ? "N/A" : `${fitResult.road_access.nearest_road_distance_m.toFixed(1)}m`}
                   </span>
+                  <span>
+                    Nearby building: {fitResult.nearby_building_access.nearest_road_distance_m == null ? "N/A" : `${fitResult.nearby_building_access.nearest_road_distance_m.toFixed(1)}m`}
+                  </span>
                 </div>
+              </div>
+            )}
+
+            {fitResult?.fit_status === "valid" && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleCompleteValidation}
+                    disabled={!selectedSession || completingValidation}
+                  className="text-xs px-3 py-2 rounded-lg bg-indigo-500/20 border border-indigo-500/35 text-indigo-200 disabled:opacity-40"
+                >
+                  {completingValidation
+                    ? "Completing..."
+                    : selectedSession?.workflowState === "land_validated" || selectedSession?.workflowState === "report_generated"
+                      ? "Completed"
+                      : "Complete"}
+                </button>
+                <button
+                  onClick={handleGenerateReport}
+                    disabled={
+                      generatingReport ||
+                      !(validationSnapshotId || selectedSession?.currentValidationSnapshotId) ||
+                      (selectedSession?.workflowState !== "land_validated" && selectedSession?.workflowState !== "report_generated")
+                    }
+                  className="text-xs px-3 py-2 rounded-lg bg-cyan-500/20 border border-cyan-500/35 text-cyan-200 disabled:opacity-40"
+                >
+                  {generatingReport ? "Generating..." : "Generate Report"}
+                </button>
+              </div>
+            )}
+
+            {reportSummary && (
+              <div className="rounded-lg p-2.5 border border-cyan-500/25 bg-cyan-500/10 text-[11px] text-white/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-cyan-200 font-semibold">Report v{reportSummary.versionNumber}</span>
+                  <span>{reportSummary.estimatedDurationDays} days</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  {Object.entries(reportSummary.elementCounts).slice(0, 6).map(([type, count]) => (
+                    <span key={type}>{type}: {count}</span>
+                  ))}
+                </div>
+                <p className="text-white/50">
+                  Workers: {reportSummary.workerMix.map((w) => `${w.role} ${w.count}`).join(", ") || "TBD"}
+                </p>
               </div>
             )}
           </div>
@@ -712,11 +1158,12 @@ export default function GisLandSelectionPage() {
 
                         {suggestions.map((item, idx) => (
                           <ParcelCard
-                            key={item.id}
+                            key={`${item.id || item.centroid?.join(",") || "parcel"}-${idx}`}
                             item={item}
                             rank={idx + 1}
                             isLocked={lockedParcel?.id === item.id}
                             onLock={handleLockParcel}
+                            onFlyTo={handleFlyTo}
                           />
                         ))}
                       </div>

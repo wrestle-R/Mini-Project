@@ -134,6 +134,7 @@ class FitValidationRequest(BaseModel):
     rotation_deg: float = 0.0
     optimize_rotation: bool = True
     road_warning_distance_m: float = Field(50.0, gt=0)
+    nearby_building_distance_m: float = Field(50.0, gt=0)
     area_unit: str = Field("sqm", description="sqm | acres | hectares")
     placement_offset_x_m: float = 0.0
     placement_offset_y_m: float = 0.0
@@ -162,6 +163,7 @@ class FitValidationResult(BaseModel):
     overflow_distance_m: Optional[float] = None
     suggested_rotation_deg: float
     road_access: RoadAccessResult
+    nearby_building_access: RoadAccessResult
     inside_geometry: Optional[dict] = None
     overflow_geometry: Optional[dict] = None
     messages: List[str]

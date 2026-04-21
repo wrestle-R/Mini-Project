@@ -9,6 +9,9 @@ interface SessionLike {
   currentMetadataFileId: string;
   currentVersionId?: { toString(): string } | string | null;
   currentVersionNumber?: number;
+  workflowState?: string;
+  currentValidationSnapshotId?: { toString(): string } | string | null;
+  currentReportId?: { toString(): string } | string | null;
   lastSavedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +37,13 @@ export function serializeIfcSession(
       ? session.currentVersionId.toString()
       : null,
     currentVersionNumber: session.currentVersionNumber || 0,
+    workflowState: session.workflowState || "draft",
+    currentValidationSnapshotId: session.currentValidationSnapshotId
+      ? session.currentValidationSnapshotId.toString()
+      : null,
+    currentReportId: session.currentReportId
+      ? session.currentReportId.toString()
+      : null,
     versionCount,
     lastSavedAt: session.lastSavedAt,
     createdAt: session.createdAt,

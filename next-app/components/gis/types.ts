@@ -32,13 +32,13 @@ export interface SuggestionTags {
 export interface SuggestionItem {
   id: string;
   geometry: GeoJSON.Geometry;
-  score: number; // 0–1
-  reasons: string[];
-  tags: SuggestionTags;
-  area_sqm: number;
-  centroid: [number, number];
-  bbox: BBox;
-  confidence_label: "high" | "medium" | "low";
+  score?: number; // 0–1
+  reasons?: string[];
+  tags?: SuggestionTags;
+  area_sqm?: number;
+  centroid?: [number, number];
+  bbox?: BBox;
+  confidence_label?: "high" | "medium" | "low";
 }
 
 // ── Agent chat events ─────────────────────────────────────────────────────
@@ -48,6 +48,7 @@ export type ChatActionType =
   | "drawPolygon"
   | "suggestAreas"
   | "filterAreas"
+  | "loadModel"
   | "showFitValidation"
   | "clearFitValidation"
   | "none";
@@ -70,6 +71,16 @@ export interface FilterAreasPayload {
   candidates: SuggestionItem[];
 }
 
+export interface LoadModelPayload {
+  glbUrl: string;
+  center: [number, number];
+  rotation: number;
+  scale?: number;
+  token?: string;
+  modelWidthM?: number;
+  modelDepthM?: number;
+}
+
 export interface ShowFitValidationPayload {
   insideGeometry?: GeoJSON.Geometry | null;
   overflowGeometry?: GeoJSON.Geometry | null;
@@ -85,6 +96,7 @@ export type ActionPayload =
   | DrawPolygonPayload
   | SuggestAreasPayload
   | FilterAreasPayload
+  | LoadModelPayload
   | ShowFitValidationPayload
   | ClearFitValidationPayload
   | Record<string, unknown>;

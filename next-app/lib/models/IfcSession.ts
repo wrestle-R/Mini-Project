@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, models, model } from "mongoose";
+import type { WorkflowState } from "@/lib/workflow/states";
 
 export interface IIfcSession extends Document {
   contractorId: mongoose.Types.ObjectId;
@@ -11,6 +12,9 @@ export interface IIfcSession extends Document {
   currentMetadataFileId: string;
   currentVersionId: mongoose.Types.ObjectId | null;
   currentVersionNumber: number;
+  workflowState: WorkflowState;
+  currentValidationSnapshotId: mongoose.Types.ObjectId | null;
+  currentReportId: mongoose.Types.ObjectId | null;
   lastSavedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +41,31 @@ const IfcSessionSchema = new Schema<IIfcSession>(
       default: null,
     },
     currentVersionNumber: { type: Number, default: 0, min: 0 },
+    workflowState: {
+      type: String,
+      enum: [
+        "draft",
+        "design_locked",
+        "land_validated",
+        "report_generated",
+        "company_approved",
+        "hiring_open",
+        "execution_active",
+        "closed",
+      ],
+      default: "draft",
+      index: true,
+    },
+    currentValidationSnapshotId: {
+      type: Schema.Types.ObjectId,
+      ref: "GisValidationSnapshot",
+      default: null,
+    },
+    currentReportId: {
+      type: Schema.Types.ObjectId,
+      ref: "ProjectReport",
+      default: null,
+    },
     lastSavedAt: { type: Date, default: null },
   },
   { timestamps: true }
