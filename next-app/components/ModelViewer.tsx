@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -19,6 +19,7 @@ interface ModelViewerProps {
   originalModelUrl?: string;
   displayMode?: "current" | "original" | "comparison";
   metadataUrl?: string;
+  authToken?: string | null;
   onElementSelect?: (element: ElementMetadata | null) => void;
 }
 
@@ -27,12 +28,14 @@ export default function ModelViewer({
   originalModelUrl,
   displayMode = "current",
   metadataUrl,
+  authToken,
   onElementSelect,
 }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const metadataRef = useRef<Record<string, ElementMetadata>>({});
   const onElementSelectRef = useRef(onElementSelect);
   onElementSelectRef.current = onElementSelect;
+  const loadRevisionRef = useRef({ current: 0, original: 0 });
 
   // Store scene objects to avoid reinitializing on model reload
   const sceneRef = useRef<{
@@ -45,19 +48,86 @@ export default function ModelViewer({
     originalModelRoot?: THREE.Object3D;
   }>({});
 
+  const disposeObject = (object?: THREE.Object3D) => {
+    if (!object) return;
+    object.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.geometry.dispose();
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((material) => material.dispose());
+        if (mesh.userData.ghostMaterial) {
+          (mesh.userData.ghostMaterial as THREE.Material).dispose();
+        }
+      }
+    });
+  };
+
+  const cloneMaterial = (material: THREE.Material) => {
+    const nextMaterial = material.clone() as THREE.MeshStandardMaterial;
+    nextMaterial.side = THREE.DoubleSide;
+    if (!("color" in nextMaterial) || !nextMaterial.color) {
+      nextMaterial.color = new THREE.Color(0xb0bcc8);
+    }
+    if ("roughness" in nextMaterial && nextMaterial.roughness === undefined) {
+      nextMaterial.roughness = 0.55;
+    }
+    if ("metalness" in nextMaterial && nextMaterial.metalness === undefined) {
+      nextMaterial.metalness = 0.15;
+    }
+    return nextMaterial;
+  };
+
+  const applyDisplayMode = useCallback(
+    (
+      mode: "current" | "original" | "comparison",
+      currentRoot?: THREE.Object3D,
+      originalRoot?: THREE.Object3D
+    ) => {
+      if (currentRoot) {
+        currentRoot.visible = mode === "current" || mode === "comparison";
+      }
+
+      if (originalRoot) {
+        originalRoot.visible = mode === "original" || mode === "comparison";
+
+        originalRoot.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            if (mode === "comparison") {
+              if (!mesh.userData.ghostMaterial) {
+                const ghostMat = new THREE.MeshStandardMaterial({
+                  color: 0x888888,
+                  transparent: true,
+                  opacity: 0.15,
+                  wireframe: true,
+                  depthWrite: false,
+                });
+                mesh.userData.ghostMaterial = ghostMat;
+              }
+              mesh.material = mesh.userData.ghostMaterial;
+            } else if (mesh.userData.originalMaterial) {
+              mesh.material = mesh.userData.originalMaterial;
+            }
+          }
+        });
+      }
+    },
+    []
+  );
+
   // Fetch metadata when URL changes
   useEffect(() => {
     if (!metadataUrl) return;
-    const metadataPath = metadataUrl.startsWith("http")
-      ? metadataUrl
-      : `http://localhost:8000${metadataUrl}`;
-    fetch(metadataPath)
+    fetch(metadataUrl, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+    })
       .then((res) => res.json())
       .then((data) => {
         metadataRef.current = data;
       })
       .catch((err) => console.error("Failed to load metadata:", err));
-  }, [metadataUrl]);
+  }, [metadataUrl, authToken]);
 
   // Initialize scene (only once)
   useEffect(() => {
@@ -265,160 +335,143 @@ export default function ModelViewer({
         container.removeChild(renderer.domElement);
       }
       // Reset ref so Fast Refresh can re-initialize properly
-      sceneRef.current.renderer = undefined as any;
-      sceneRef.current.scene = undefined as any;
-      sceneRef.current.camera = undefined as any;
-      sceneRef.current.controls = undefined as any;
+      sceneRef.current = {};
     };
   }, []); // Empty dependency array - initialize only once
 
-  const loadModelToScene = (url: string, isOriginal: boolean) => {
-    const { scene, camera, controls } = sceneRef.current;
-    if (!scene || !camera || !controls) return;
+  const loadModelToScene = useCallback(
+    (url: string, isOriginal: boolean) => {
+      const { scene, camera, controls } = sceneRef.current;
+      if (!scene || !camera || !controls) return;
+      const loadKey = isOriginal ? "original" : "current";
+      loadRevisionRef.current[loadKey] += 1;
+      const requestId = loadRevisionRef.current[loadKey];
 
-    // Remove old model if exists
-    const existingModelRoot = isOriginal ? sceneRef.current.originalModelRoot : sceneRef.current.modelRoot;
-    if (existingModelRoot) {
-      existingModelRoot.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh;
-          mesh.geometry.dispose();
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach((m) => m.dispose());
-          } else {
-            mesh.material.dispose();
-          }
-        }
-      });
-      scene.remove(existingModelRoot);
-      if (isOriginal) {
-        sceneRef.current.originalModelRoot = undefined;
-      } else {
-        sceneRef.current.modelRoot = undefined;
-      }
-    }
-
-    const loader = new GLTFLoader();
-    const fullUrl = url.startsWith("http")
-      ? url
-      : `http://localhost:8000${url}`;
-
-    loader.load(
-      fullUrl,
-      (gltf) => {
-        const model = gltf.scene;
+      const existingModelRoot = isOriginal
+        ? sceneRef.current.originalModelRoot
+        : sceneRef.current.modelRoot;
+      if (existingModelRoot) {
+        disposeObject(existingModelRoot);
+        scene.remove(existingModelRoot);
         if (isOriginal) {
-          sceneRef.current.originalModelRoot = model;
+          sceneRef.current.originalModelRoot = undefined;
         } else {
-          sceneRef.current.modelRoot = model;
+          sceneRef.current.modelRoot = undefined;
+          onElementSelectRef.current?.(null);
         }
-
-        // Normalize model to scene origin before and after the axis adjustment.
-        // Some GLB exports shift their center when rotated, so we frame again after
-        // converting from IFC's Z-up to Three.js Y-up.
-        const bounds = new THREE.Box3().setFromObject(model);
-        const center = bounds.getCenter(new THREE.Vector3());
-        model.position.sub(center);
-
-        // IFC files use Z-up; Three.js uses Y-up.
-        // Apply the rotation after centering so it doesn't swing the model away from view.
-        model.rotation.x = -Math.PI / 2;
-
-        const framedBounds = new THREE.Box3().setFromObject(model);
-        const framedCenter = framedBounds.getCenter(new THREE.Vector3());
-        const framedSize = framedBounds.getSize(new THREE.Vector3());
-        
-        // Center X and Z, but place the BOTTOM of the model at Y=0 (the ground plane)
-        model.position.x -= framedCenter.x;
-        model.position.z -= framedCenter.z;
-        model.position.y -= framedBounds.min.y;
-
-        // Preserve original IFC colors and fix WebGL material sharing crashes
-        model.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mesh = child as THREE.Mesh;
-            mesh.castShadow = false;
-            mesh.receiveShadow = false;
-
-            // Clone the material to prevent WebGL texture corruption when mutating shared references
-            const mat = Array.isArray(mesh.material)
-              ? (mesh.material[0] as THREE.MeshStandardMaterial).clone()
-              : (mesh.material as THREE.MeshStandardMaterial).clone();
-              
-            mat.side = THREE.DoubleSide;
-
-            // Enable vertex colors if available
-            if (mesh.geometry.attributes.color) {
-              mat.vertexColors = true;
-              mat.needsUpdate = true;
-            } else {
-              // Apply neutral default to elements lacking explicit colors
-              mat.color = new THREE.Color(0xb0bcc8);
-              mat.roughness = 0.55;
-              mat.metalness = 0.15;
-            }
-            // Save the original material for toggling modes
-            mesh.userData.originalMaterial = mat;
-            mesh.material = mat;
-          }
-        });
-
-        scene.add(model);
-
-        // Fit camera to model bounds if loading the current model
-        if (!isOriginal) {
-          const maxDim = Math.max(framedSize.x, framedSize.y, framedSize.z);
-          const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0.01 ? maxDim : 10;
-          const fov = camera.fov * (Math.PI / 180);
-          const distance = Math.max(
-            (safeMaxDim / (2 * Math.tan(fov / 2))) * 1.3,
-            12
-          );
-
-          // Only set camera pos if original isn't already loaded and framed
-          if (!sceneRef.current.originalModelRoot) {
-            camera.position.set(
-              distance * 0.7,
-              distance * 0.5,
-              distance * 0.7
-            );
-            camera.lookAt(0, 0, 0);
-            controls.target.set(0, 0, 0);
-          }
-        }
-
-        // Update ground plane
-        const grid = scene.children.find(
-          (c) => c instanceof THREE.GridHelper
-        ) as THREE.GridHelper | undefined;
-        if (grid) {
-          grid.position.y = 0;
-        }
-
-        const ground = scene.children.find(
-          (c) => c instanceof THREE.Mesh && c.geometry instanceof THREE.PlaneGeometry
-        ) as THREE.Mesh | undefined;
-        if (ground) {
-          ground.position.y = -0.01;
-        }
-
-        controls.update();
-
-        // Apply display mode constraints
-        applyDisplayMode(displayMode, sceneRef.current.modelRoot, sceneRef.current.originalModelRoot);
-        
-      },
-      undefined,
-      (error) => {
-        console.error(`Error loading GLB model (${fullUrl}):`, error);
       }
-    );
-  };
+
+      const loader = new GLTFLoader();
+      if (authToken) {
+        loader.setRequestHeader({ Authorization: `Bearer ${authToken}` });
+      }
+
+      loader.load(
+        url,
+        (gltf) => {
+          if (requestId !== loadRevisionRef.current[loadKey]) {
+            disposeObject(gltf.scene);
+            return;
+          }
+
+          const model = gltf.scene;
+          if (isOriginal) {
+            sceneRef.current.originalModelRoot = model;
+          } else {
+            sceneRef.current.modelRoot = model;
+          }
+
+          const bounds = new THREE.Box3().setFromObject(model);
+          const center = bounds.getCenter(new THREE.Vector3());
+          model.position.sub(center);
+          model.rotation.x = -Math.PI / 2;
+
+          const framedBounds = new THREE.Box3().setFromObject(model);
+          const framedCenter = framedBounds.getCenter(new THREE.Vector3());
+          const framedSize = framedBounds.getSize(new THREE.Vector3());
+
+          model.position.x -= framedCenter.x;
+          model.position.z -= framedCenter.z;
+          model.position.y -= framedBounds.min.y;
+
+          model.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              mesh.castShadow = false;
+              mesh.receiveShadow = false;
+
+              const nextMaterial = Array.isArray(mesh.material)
+                ? mesh.material.map(cloneMaterial)
+                : cloneMaterial(mesh.material);
+
+              const materials = Array.isArray(nextMaterial) ? nextMaterial : [nextMaterial];
+              materials.forEach((material) => {
+                if (mesh.geometry.attributes.color) {
+                  material.vertexColors = true;
+                }
+                material.needsUpdate = true;
+              });
+
+              mesh.userData.originalMaterial = nextMaterial;
+              mesh.material = nextMaterial;
+            }
+          });
+
+          scene.add(model);
+
+          if (!isOriginal) {
+            const maxDim = Math.max(framedSize.x, framedSize.y, framedSize.z);
+            const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0.01 ? maxDim : 10;
+            const fov = camera.fov * (Math.PI / 180);
+            const distance = Math.max(
+              (safeMaxDim / (2 * Math.tan(fov / 2))) * 1.3,
+              12
+            );
+
+            if (!sceneRef.current.originalModelRoot) {
+              camera.position.set(distance * 0.7, distance * 0.5, distance * 0.7);
+              camera.lookAt(0, 0, 0);
+              controls.target.set(0, 0, 0);
+            }
+          }
+
+          const grid = scene.children.find(
+            (child) => child instanceof THREE.GridHelper
+          ) as THREE.GridHelper | undefined;
+          if (grid) {
+            grid.position.y = 0;
+          }
+
+          const ground = scene.children.find(
+            (child) =>
+              child instanceof THREE.Mesh && child.geometry instanceof THREE.PlaneGeometry
+          ) as THREE.Mesh | undefined;
+          if (ground) {
+            ground.position.y = -0.01;
+          }
+
+          controls.update();
+          applyDisplayMode(
+            displayMode,
+            sceneRef.current.modelRoot,
+            sceneRef.current.originalModelRoot
+          );
+        },
+        undefined,
+        (error) => {
+          if (requestId === loadRevisionRef.current[loadKey]) {
+            console.error(`Error loading GLB model (${url}):`, error);
+          }
+        }
+      );
+    },
+    [applyDisplayMode, authToken, displayMode]
+  );
 
   // Load current model
   useEffect(() => {
     loadModelToScene(modelUrl, false);
-  }, [modelUrl]);
+  }, [loadModelToScene, modelUrl]);
 
   // Load original model
   useEffect(() => {
@@ -430,51 +483,12 @@ export default function ModelViewer({
         sceneRef.current.originalModelRoot = undefined;
       }
     }
-  }, [originalModelUrl]);
+  }, [loadModelToScene, originalModelUrl]);
 
   // Apply display mode
   useEffect(() => {
     applyDisplayMode(displayMode, sceneRef.current.modelRoot, sceneRef.current.originalModelRoot);
-  }, [displayMode]);
-
-  const applyDisplayMode = (
-    mode: "current" | "original" | "comparison",
-    currentRoot?: THREE.Object3D,
-    originalRoot?: THREE.Object3D
-  ) => {
-    if (currentRoot) {
-      currentRoot.visible = mode === "current" || mode === "comparison";
-    }
-
-    if (originalRoot) {
-      originalRoot.visible = mode === "original" || mode === "comparison";
-      
-      originalRoot.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh;
-          if (mode === "comparison") {
-            // Apply ghost material
-            if (!mesh.userData.ghostMaterial) {
-              const ghostMat = new THREE.MeshStandardMaterial({
-                color: 0x888888,
-                transparent: true,
-                opacity: 0.15,
-                wireframe: true,
-                depthWrite: false,
-              });
-              mesh.userData.ghostMaterial = ghostMat;
-            }
-            mesh.material = mesh.userData.ghostMaterial;
-          } else {
-            // Restore original
-            if (mesh.userData.originalMaterial) {
-              mesh.material = mesh.userData.originalMaterial;
-            }
-          }
-        }
-      });
-    }
-  };
+  }, [applyDisplayMode, displayMode]);
 
   return (
     <div

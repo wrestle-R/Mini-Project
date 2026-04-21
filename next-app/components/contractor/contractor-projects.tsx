@@ -25,7 +25,14 @@ import {
 
 interface Assignment {
   id: string;
-  project: { _id?: string; title: string; status: string; location: string } | null;
+  project:
+    | {
+        _id?: string;
+        title: string;
+        status: string;
+        location: { displayName: string; lat: number | null; lng: number | null };
+      }
+    | null;
   customer: { name: string; email: string; phone: string } | null;
   contractor: { firstName: string; lastName: string; email: string } | null;
   status: string;
@@ -135,7 +142,8 @@ export function ContractorProjects() {
                   <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                     {a.project?.location && (
                       <span className="flex items-center gap-1">
-                        <FiMapPin className="h-3.5 w-3.5" /> {a.project.location}
+                        <FiMapPin className="h-3.5 w-3.5" />
+                        {a.project.location.displayName || "Location pending"}
                       </span>
                     )}
                   </div>

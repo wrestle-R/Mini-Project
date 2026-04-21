@@ -36,7 +36,7 @@ import {
 interface Project {
   title: string;
   status: string;
-  location: string;
+  location: { displayName: string; lat: number | null; lng: number | null };
 }
 
 interface Application {
@@ -82,7 +82,7 @@ interface JobHistoryItem {
     id: string;
     title: string;
     status: string;
-    location: string;
+    location: { displayName: string; lat: number | null; lng: number | null };
     startDate: string | null;
     endDate: string | null;
   } | null;
@@ -328,7 +328,8 @@ function WorkerProfilePanel({
                 <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
                   {j.project?.location && (
                     <span className="flex items-center gap-1">
-                      <FiMapPin className="h-3 w-3" /> {j.project.location}
+                      <FiMapPin className="h-3 w-3" />
+                      {j.project.location.displayName || "Location pending"}
                     </span>
                   )}
                   <span className="flex items-center gap-1">
@@ -362,7 +363,7 @@ function ProjectApplicationsRow({
 }: {
   projectTitle: string;
   projectStatus: string;
-  projectLocation: string;
+  projectLocation: { displayName: string; lat: number | null; lng: number | null } | null;
   apps: Application[];
   token: string;
   onStatusChange: (appId: string, newStatus: "accepted" | "rejected") => void;
@@ -412,7 +413,8 @@ function ProjectApplicationsRow({
             <CardTitle className="text-base">{projectTitle}</CardTitle>
             <CardDescription className="flex gap-3 mt-1">
               <span className="flex items-center gap-1">
-                <FiMapPin className="h-3.5 w-3.5" /> {projectLocation || "—"}
+                <FiMapPin className="h-3.5 w-3.5" />
+                {projectLocation?.displayName || "Location pending"}
               </span>
               <span className="flex items-center gap-1">
                 <FiUsers className="h-3.5 w-3.5" /> {apps.length} applicant
@@ -637,7 +639,7 @@ export function ContractorApplications() {
               key={projectId}
               projectTitle={project?.title || "Untitled Project"}
               projectStatus={project?.status || "—"}
-              projectLocation={project?.location || ""}
+              projectLocation={project?.location || null}
               apps={apps}
               token={token!}
               onStatusChange={handleStatusChange}

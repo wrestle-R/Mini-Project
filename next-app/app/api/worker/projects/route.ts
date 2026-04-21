@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Project from "@/lib/models/Project";
 import ProjectApplication from "@/lib/models/ProjectApplication";
+import { normalizeProjectLocation } from "@/lib/project-location";
 // Import Company so Mongoose registers its schema before .populate("companyId") runs
 import "@/lib/models/Company";
 
@@ -79,7 +80,7 @@ export async function GET(req: Request) {
           title: p.title,
           description: p.description,
           status: p.status,
-          location: p.location,
+          location: normalizeProjectLocation(p.location),
           startDate: p.startDate,
           endDate: p.endDate,
           budget: p.budget,

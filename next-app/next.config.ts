@@ -13,7 +13,11 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    middlewareClientMaxBodySize: "100mb",
+  },
   poweredByHeader: false,
+  serverExternalPackages: ["web-ifc"],
 };
 
 export default nextConfig;

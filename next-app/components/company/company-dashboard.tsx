@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useCompany } from "@/contexts/CompanyContext";
 import {
@@ -11,20 +12,56 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 import {
   FiFolder,
   FiUserPlus,
   FiClipboard,
 } from "react-icons/fi";
 
-const stats = [
-  { label: "Projects", value: "—", icon: FiFolder },
-  { label: "Contractors", value: "—", icon: FiUserPlus },
-  { label: "Assignments", value: "—", icon: FiClipboard },
-];
+const statCards = [
+  { label: "Projects", key: "projects", icon: FiFolder },
+  { label: "Contractors", key: "contractors", icon: FiUserPlus },
+  { label: "Assignments", key: "assignments", icon: FiClipboard },
+] as const;
+
+type StatsState = {
+  projects: number;
+  contractors: number;
+  assignments: number;
+};
+
+const DEFAULT_STATS: StatsState = {
+  projects: 0,
+  contractors: 0,
+  assignments: 0,
+};
 
 export function CompanyDashboard() {
-  const { user } = useCompany();
+  const { user, token } = useCompany();
+  const [stats, setStats] = useState<StatsState>(DEFAULT_STATS);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch("/api/dashboard/company/stats", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to load stats");
+        const data = await res.json();
+        setStats({
+          projects: Number(data?.stats?.projects ?? 0),
+          contractors: Number(data?.stats?.contractors ?? 0),
+          assignments: Number(data?.stats?.assignments ?? 0),
+        });
+      } catch {
+        toast.error("Failed to load dashboard stats");
+      }
+    };
+
+    fetchStats();
+  }, [token]);
 
   if (!user.id) {
     return (
@@ -62,7 +99,7 @@ export function CompanyDashboard() {
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {stats.map((stat, idx) => (
+        {statCards.map((stat, idx) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 12 }}
@@ -77,7 +114,7 @@ export function CompanyDashboard() {
                 <div>
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
                   <p className="text-lg font-semibold text-foreground">
-                    {stat.value}
+                    {stats[stat.key].toLocaleString()}
                   </p>
                 </div>
               </CardContent>
