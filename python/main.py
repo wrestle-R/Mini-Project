@@ -23,6 +23,9 @@ from backend.services.model_editor import execute_action, validate_model, ModelE
 
 import sys
 
+# GIS / Spatial Intelligence router
+from backend.gis.router import router as gis_router
+
 # Add SmartAttendance to sys.path to allow internal imports to work
 sys.path.append(os.path.join(os.getcwd(), "SmartAttendance"))
 
@@ -52,6 +55,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register GIS / Spatial Intelligence router
+app.include_router(gis_router)
 
 # Ensure directories exist
 os.makedirs("models", exist_ok=True)
