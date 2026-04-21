@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import IfcSession from "@/lib/models/IfcSession";
-import IfcVersion from "@/lib/models/IfcVersion";
 import { getContractorIdFromAuthHeader } from "@/lib/ifc/auth";
+import { createIfcVersionSnapshot } from "@/lib/ifc/sessions";
+import { serializeIfcSession } from "@/lib/ifc/serializers";
 
 export async function POST(
   req: Request,
@@ -31,33 +32,30 @@ export async function POST(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const latestVersion = await IfcVersion.findOne({ sessionId: session._id })
-      .sort({ versionNumber: -1 })
-      .select("versionNumber");
-    const nextVersionNumber = (latestVersion?.versionNumber || 0) + 1;
-
     const body = await req.json().catch(() => null);
-    const label =
-      body?.label?.trim() || `Snapshot v${nextVersionNumber} (${new Date().toLocaleString()})`;
-
-    const version = await IfcVersion.create({
-      sessionId: session._id,
-      versionNumber: nextVersionNumber,
-      label,
+    const version = await createIfcVersionSnapshot({
+      sessionId: session._id.toString(),
+      contractorId,
+      label:
+        body?.label?.trim() || `Manual snapshot ${new Date().toLocaleString()}`,
+      source: "manual",
       glbFileId: session.currentGlbFileId,
       jsonFileId: session.currentJsonFileId,
       metadataFileId: session.currentMetadataFileId,
-      createdBy: new mongoose.Types.ObjectId(contractorId),
     });
 
+    session.currentVersionId = version._id;
+    session.currentVersionNumber = version.versionNumber;
     session.lastSavedAt = new Date();
     await session.save();
 
     return NextResponse.json({
+      session: serializeIfcSession(session, version.versionNumber),
       version: {
         id: version._id.toString(),
         versionNumber: version.versionNumber,
         label: version.label,
+        source: version.source,
         createdAt: version.createdAt,
       },
     });

@@ -176,8 +176,8 @@ export function GoogleTranslateLanguageSelector({
   const wrapperClassName = useMemo(() => {
     if (variant === "sidebar") {
       return cn(
-        "notranslate flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar/70 px-2 py-1.5 text-sidebar-foreground",
-        compact && "justify-center px-2",
+        "notranslate group flex w-full items-center gap-3 overflow-hidden rounded-xl border border-sidebar-border/70 bg-sidebar-accent/55 px-3.5 text-sidebar-foreground shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+        compact ? "h-10 w-10 justify-center rounded-lg px-0" : "h-12 text-left",
         className
       );
     }
@@ -221,22 +221,38 @@ export function GoogleTranslateLanguageSelector({
             wrapperClassName,
             isIconOnly &&
               (variant === "sidebar"
-                ? "h-8 w-full justify-center"
+                ? "h-10 w-10 justify-center rounded-lg p-0"
                 : "h-9 w-9 justify-center p-0")
           )}
         >
           <Globe
             className={cn(
               "h-4 w-4 shrink-0 text-primary",
-              variant === "sidebar" && "text-sidebar-primary"
+              variant === "sidebar" &&
+                "text-sidebar-primary transition-transform duration-200 group-hover:scale-110"
             )}
             aria-hidden="true"
           />
 
           {!isIconOnly && (
             <>
-              <span className="text-xs font-medium opacity-80">{selectedLabel}</span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+              {variant === "sidebar" ? (
+                <span className="grid flex-1 text-left leading-none">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Language
+                  </span>
+                  <span className="pt-1 text-sm font-medium">{selectedLabel}</span>
+                </span>
+              ) : (
+                <span className="text-xs font-medium leading-none">{selectedLabel}</span>
+              )}
+              <ChevronDown
+                className={cn(
+                  "ml-auto h-3.5 w-3.5 opacity-80 transition-transform duration-200",
+                  variant === "sidebar" && "h-4 w-4"
+                )}
+                aria-hidden="true"
+              />
             </>
           )}
         </button>
@@ -245,13 +261,22 @@ export function GoogleTranslateLanguageSelector({
       <DropdownMenuContent
         align="end"
         sideOffset={6}
-        className="min-w-44"
+        side={variant === "sidebar" && !isIconOnly ? "top" : "bottom"}
+        className={cn(
+          "min-w-44",
+          variant === "sidebar" &&
+            "w-[var(--radix-dropdown-menu-trigger-width)] min-w-[var(--radix-dropdown-menu-trigger-width)] rounded-xl border-sidebar-border/70 bg-sidebar p-1.5 shadow-xl"
+        )}
       >
         {LANGUAGE_OPTIONS.map((language) => (
           <DropdownMenuItem
             key={language.code}
             onClick={() => handleLanguageChange(language.code)}
-            className="cursor-pointer"
+            className={cn(
+              "cursor-pointer",
+              variant === "sidebar" &&
+                "rounded-lg px-3 py-2.5 text-sm transition-colors focus:bg-sidebar-accent"
+            )}
           >
             <span className="mr-2 inline-flex w-4 items-center justify-center">
               {selectedLanguage === language.code ? (

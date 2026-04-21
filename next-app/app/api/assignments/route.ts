@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import ProjectContractorAssignment from "@/lib/models/ProjectContractorAssignment";
 import { verifyCustomToken } from "@/lib/auth";
+import { normalizeProjectLocation } from "@/lib/project-location";
 // Import models so Mongoose registers their schemas before .populate() runs
 import "@/lib/models/Project";
 import "@/lib/models/Contractor";
@@ -87,16 +88,35 @@ export async function GET(req: Request) {
       .sort({ createdAt: -1 });
 
     return NextResponse.json({
-      assignments: assignments.map((a) => ({
-        id: a._id.toString(),
-        project: a.projectId,
-        contractor: a.contractorId,
-        customer: a.customerId,
-        companyId: a.companyId.toString(),
-        status: a.status,
-        notes: a.notes,
-        assignedAt: a.assignedAt,
-      })),
+      assignments: assignments.map((a) => {
+        const projectDoc =
+          a.projectId && typeof a.projectId === "object"
+            ? (a.projectId as unknown as {
+                _id: { toString(): string };
+                title?: string;
+                status?: string;
+                location?: unknown;
+              })
+            : null;
+
+        return {
+          project: projectDoc
+            ? {
+                _id: projectDoc._id,
+                title: projectDoc.title,
+                status: projectDoc.status,
+                location: normalizeProjectLocation(projectDoc.location),
+              }
+            : a.projectId,
+          id: a._id.toString(),
+          contractor: a.contractorId,
+          customer: a.customerId,
+          companyId: a.companyId.toString(),
+          status: a.status,
+          notes: a.notes,
+          assignedAt: a.assignedAt,
+        };
+      }),
     });
   } catch (error) {
     console.error("[API/assignments] Error:", error);

@@ -4,6 +4,7 @@ import { verifyCustomToken } from "@/lib/auth";
 import ProjectContractorAssignment from "@/lib/models/ProjectContractorAssignment";
 import ProjectApplication from "@/lib/models/ProjectApplication";
 import Worker from "@/lib/models/Worker";
+import { normalizeProjectLocation } from "@/lib/project-location";
 // Ensure schemas are registered
 import "@/lib/models/Project";
 import "@/lib/models/Contractor";
@@ -59,7 +60,7 @@ export async function GET(
       title: string;
       description: string;
       status: string;
-      location: string;
+      location: unknown;
       startDate: Date | null;
       endDate: Date | null;
       budget: number;
@@ -118,7 +119,7 @@ export async function GET(
         title: project.title,
         description: project.description,
         status: project.status,
-        location: project.location,
+        location: normalizeProjectLocation(project.location),
         startDate: project.startDate,
         endDate: project.endDate,
         budget: project.budget,

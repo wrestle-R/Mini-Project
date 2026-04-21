@@ -8,6 +8,8 @@ export interface IIfcChatMessage extends Document {
   plan?: string[];
   actions?: Record<string, unknown>[];
   error?: string;
+  versionId?: mongoose.Types.ObjectId | null;
+  versionNumber?: number | null;
   timestamp: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -27,6 +29,12 @@ const IfcChatMessageSchema = new Schema<IIfcChatMessage>(
     plan: { type: [String], default: [] },
     actions: { type: [Schema.Types.Mixed], default: [] },
     error: { type: String, default: "" },
+    versionId: {
+      type: Schema.Types.ObjectId,
+      ref: "IfcVersion",
+      default: null,
+    },
+    versionNumber: { type: Number, default: null },
     timestamp: { type: Date, required: true, index: true },
   },
   { timestamps: true }

@@ -35,7 +35,7 @@ interface ProjectItem {
   title: string;
   description: string;
   status: string;
-  location: string;
+  location: { displayName: string; lat: number | null; lng: number | null };
   budget: number;
   isOpen: boolean;
   startDate: string | null;
@@ -298,7 +298,8 @@ export function WorkerProjects() {
                 <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                   {project.location && (
                     <span className="flex items-center gap-1">
-                      <FiMapPin className="h-3.5 w-3.5" /> {project.location}
+                      <FiMapPin className="h-3.5 w-3.5" />
+                      {project.location.displayName || "Location pending"}
                     </span>
                   )}
                   {project.budget > 0 && (

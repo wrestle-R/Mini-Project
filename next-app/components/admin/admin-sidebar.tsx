@@ -21,6 +21,7 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Collapsible,
@@ -28,6 +29,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
 import { Shield, ChevronRight, Building2 } from "lucide-react";
 import { FiHome, FiLogOut } from "react-icons/fi";
 
@@ -63,6 +65,7 @@ const navItems: NavItem[] = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const { logout } = useAdmin();
+  const { state } = useSidebar();
 
   const isActive = (href: string, exact = false) => {
     if (exact) return pathname === href;
@@ -172,8 +175,12 @@ export function AdminSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="px-2 py-1">
-          <ThemeToggle fullWidth />
+        <div className="space-y-2 px-2 py-1">
+          <ThemeToggle fullWidth={state === "expanded"} />
+          <GoogleTranslateLanguageSelector
+            variant="sidebar"
+            compact={state === "collapsed"}
+          />
         </div>
         <SidebarSeparator />
         <SidebarMenu>

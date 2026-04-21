@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import IfcSession from "@/lib/models/IfcSession";
+import IfcVersion from "@/lib/models/IfcVersion";
 import { getContractorIdFromAuthHeader } from "@/lib/ifc/auth";
 import { downloadGridFSFileAsBuffer, getGridFSFileInfo } from "@/lib/ifc/gridfs";
 
@@ -33,7 +34,27 @@ export async function GET(
       ],
     }).select("_id");
 
-    if (!ownerSession) {
+    let hasAccess = Boolean(ownerSession);
+
+    if (!hasAccess) {
+      const version = await IfcVersion.findOne({
+        $or: [
+          { glbFileId: fileId },
+          { jsonFileId: fileId },
+          { metadataFileId: fileId },
+        ],
+      }).select("sessionId");
+
+      if (version) {
+        const versionOwner = await IfcSession.findOne({
+          _id: version.sessionId,
+          contractorId: new mongoose.Types.ObjectId(contractorId),
+        }).select("_id");
+        hasAccess = Boolean(versionOwner);
+      }
+    }
+
+    if (!hasAccess) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

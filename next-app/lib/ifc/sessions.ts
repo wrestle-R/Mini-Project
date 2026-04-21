@@ -1,50 +1,45 @@
 import dbConnect from "@/lib/db";
 import IfcSession from "@/lib/models/IfcSession";
 import IfcVersion from "@/lib/models/IfcVersion";
-import { buildPythonAssetUrl } from "@/lib/ifc/python";
 import { uploadBufferToGridFS } from "@/lib/ifc/gridfs";
+import {
+  createMetadataFromModel,
+  generateGlbFromModel,
+  type IfcModelRecord,
+} from "@/lib/ifc/engine";
 import mongoose from "mongoose";
 
-async function fetchBinary(url: string) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch asset ${url} (${res.status})`);
-  }
-  const arr = await res.arrayBuffer();
-  return Buffer.from(arr);
-}
+export type IfcVersionSource = "upload" | "chat" | "manual" | "rollback";
 
-export async function ingestPythonAssetsToGridFS(params: {
+export async function persistIfcModelAssets(params: {
   sessionId?: string;
-  projectId: string;
-  modelUrl: string;
-  jsonUrl: string;
-  metadataUrl: string;
+  model: IfcModelRecord;
 }) {
+  const metadata = createMetadataFromModel(params.model);
   const [glbBuffer, jsonBuffer, metadataBuffer] = await Promise.all([
-    fetchBinary(buildPythonAssetUrl(params.modelUrl)),
-    fetchBinary(buildPythonAssetUrl(params.jsonUrl)),
-    fetchBinary(buildPythonAssetUrl(params.metadataUrl)),
+    generateGlbFromModel(params.model),
+    Promise.resolve(Buffer.from(JSON.stringify(params.model, null, 2), "utf-8")),
+    Promise.resolve(Buffer.from(JSON.stringify(metadata, null, 2), "utf-8")),
   ]);
 
   const [glbFileId, jsonFileId, metadataFileId] = await Promise.all([
     uploadBufferToGridFS({
       buffer: glbBuffer,
-      filename: `${params.projectId}.glb`,
+      filename: `${params.model.project_id}.glb`,
       contentType: "model/gltf-binary",
-      metadata: { projectId: params.projectId, sessionId: params.sessionId, kind: "glb" },
+      metadata: { projectId: params.model.project_id, sessionId: params.sessionId, kind: "glb" },
     }),
     uploadBufferToGridFS({
       buffer: jsonBuffer,
-      filename: `${params.projectId}.json`,
+      filename: `${params.model.project_id}.json`,
       contentType: "application/json",
-      metadata: { projectId: params.projectId, sessionId: params.sessionId, kind: "json" },
+      metadata: { projectId: params.model.project_id, sessionId: params.sessionId, kind: "json" },
     }),
     uploadBufferToGridFS({
       buffer: metadataBuffer,
-      filename: `${params.projectId}_metadata.json`,
+      filename: `${params.model.project_id}_metadata.json`,
       contentType: "application/json",
-      metadata: { projectId: params.projectId, sessionId: params.sessionId, kind: "metadata" },
+      metadata: { projectId: params.model.project_id, sessionId: params.sessionId, kind: "metadata" },
     }),
   ]);
 
@@ -62,4 +57,39 @@ export async function getOwnedIfcSessionOrNull(sessionId: string, contractorId: 
 export async function getVersionCount(sessionId: string) {
   await dbConnect();
   return IfcVersion.countDocuments({ sessionId: new mongoose.Types.ObjectId(sessionId) });
+}
+
+export async function createIfcVersionSnapshot(params: {
+  sessionId: string;
+  contractorId: string;
+  label: string;
+  source: IfcVersionSource;
+  glbFileId: string;
+  jsonFileId: string;
+  metadataFileId: string;
+  restoredFromVersionId?: string | null;
+}) {
+  await dbConnect();
+
+  const latestVersion = await IfcVersion.findOne({
+    sessionId: new mongoose.Types.ObjectId(params.sessionId),
+  })
+    .sort({ versionNumber: -1 })
+    .select("versionNumber");
+
+  const nextVersionNumber = (latestVersion?.versionNumber || 0) + 1;
+
+  return IfcVersion.create({
+    sessionId: new mongoose.Types.ObjectId(params.sessionId),
+    versionNumber: nextVersionNumber,
+    label: params.label,
+    source: params.source,
+    glbFileId: params.glbFileId,
+    jsonFileId: params.jsonFileId,
+    metadataFileId: params.metadataFileId,
+    createdBy: new mongoose.Types.ObjectId(params.contractorId),
+    restoredFromVersionId: params.restoredFromVersionId
+      ? new mongoose.Types.ObjectId(params.restoredFromVersionId)
+      : null,
+  });
 }

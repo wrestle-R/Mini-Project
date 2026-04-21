@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Project from "@/lib/models/Project";
 import { verifyCustomToken } from "@/lib/auth";
+import { normalizeProjectLocation } from "@/lib/project-location";
 
 export async function POST(req: Request) {
   try {
@@ -27,11 +28,13 @@ export async function POST(req: Request) {
 
     await dbConnect();
 
+    const normalizedLocation = normalizeProjectLocation(location);
+
     const project = await Project.create({
       companyId: payload.id,
       title: title.trim(),
       description: description?.trim() || "",
-      location: location?.trim() || "",
+      location: normalizedLocation,
       startDate: startDate || null,
       endDate: endDate || null,
       budget: budget || 0,
@@ -43,7 +46,7 @@ export async function POST(req: Request) {
       title: project.title,
       description: project.description,
       status: project.status,
-      location: project.location,
+      location: normalizeProjectLocation(project.location),
       startDate: project.startDate,
       endDate: project.endDate,
       budget: project.budget,
@@ -83,7 +86,7 @@ export async function GET(req: Request) {
         title: p.title,
         description: p.description,
         status: p.status,
-        location: p.location,
+        location: normalizeProjectLocation(p.location),
         startDate: p.startDate,
         endDate: p.endDate,
         budget: p.budget,

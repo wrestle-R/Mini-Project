@@ -5,8 +5,8 @@ import IfcSession from "@/lib/models/IfcSession";
 import IfcChatMessage from "@/lib/models/IfcChatMessage";
 import IfcVersion from "@/lib/models/IfcVersion";
 import { getContractorIdFromAuthHeader } from "@/lib/ifc/auth";
-import { getPythonApiBaseUrl } from "@/lib/ifc/python";
-import { ingestPythonAssetsToGridFS } from "@/lib/ifc/sessions";
+import { createModelFromIfcBuffer } from "@/lib/ifc/engine";
+import { createIfcVersionSnapshot, persistIfcModelAssets } from "@/lib/ifc/sessions";
 import { serializeIfcSession } from "@/lib/ifc/serializers";
 
 export async function GET(req: Request) {
@@ -69,52 +69,26 @@ export async function POST(req: Request) {
       );
     }
 
-    const pythonFormData = new FormData();
-    pythonFormData.append("file", file);
-
-    const uploadRes = await fetch(`${getPythonApiBaseUrl()}/api/ifc/upload`, {
-      method: "POST",
-      body: pythonFormData,
-    });
-    const uploadData = await uploadRes.json().catch(() => null);
-    if (!uploadRes.ok) {
-      return NextResponse.json(
-        { error: uploadData?.detail || "IFC upload failed" },
-        { status: uploadRes.status }
-      );
-    }
-
-    const pythonProjectId = uploadData?.project_id as string;
-    const modelUrl = uploadData?.model_url as string;
-    const jsonUrl = uploadData?.json_url as string;
-    const metadataUrl = uploadData?.metadata_url as string;
-
-    if (!pythonProjectId || !modelUrl || !jsonUrl || !metadataUrl) {
-      return NextResponse.json(
-        { error: "Python service returned incomplete asset metadata" },
-        { status: 502 }
-      );
-    }
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const modelRecord = await createModelFromIfcBuffer(fileBuffer, file.name);
+    const projectId = modelRecord.project_id;
 
     await dbConnect();
 
-    const sessionDoc = await IfcSession.create({
+    const sessionDoc = new IfcSession({
       contractorId: new mongoose.Types.ObjectId(contractorId),
       title: file.name,
       sourceFileName: file.name,
       status: "active",
-      pythonProjectId,
-      currentGlbFileId: "",
-      currentJsonFileId: "",
-      currentMetadataFileId: "",
+      projectId,
+      currentGlbFileId: "pending",
+      currentJsonFileId: "pending",
+      currentMetadataFileId: "pending",
     });
 
-    const assetRefs = await ingestPythonAssetsToGridFS({
+    const assetRefs = await persistIfcModelAssets({
       sessionId: sessionDoc._id.toString(),
-      projectId: pythonProjectId,
-      modelUrl,
-      jsonUrl,
-      metadataUrl,
+      model: modelRecord,
     });
 
     sessionDoc.currentGlbFileId = assetRefs.glbFileId;
@@ -122,15 +96,32 @@ export async function POST(req: Request) {
     sessionDoc.currentMetadataFileId = assetRefs.metadataFileId;
     await sessionDoc.save();
 
+    const uploadVersion = await createIfcVersionSnapshot({
+      sessionId: sessionDoc._id.toString(),
+      contractorId,
+      label: "Original upload",
+      source: "upload",
+      glbFileId: sessionDoc.currentGlbFileId,
+      jsonFileId: sessionDoc.currentJsonFileId,
+      metadataFileId: sessionDoc.currentMetadataFileId,
+    });
+
+    sessionDoc.currentVersionId = uploadVersion._id;
+    sessionDoc.currentVersionNumber = uploadVersion.versionNumber;
+    await sessionDoc.save();
+
     await IfcChatMessage.create({
       sessionId: sessionDoc._id,
       role: "assistant",
-      content: "Model uploaded successfully. You can start editing with chat instructions.",
+      content:
+        "Model uploaded successfully. The original state is saved as v1, and every edit can be rolled back.",
+      versionId: uploadVersion._id,
+      versionNumber: uploadVersion.versionNumber,
       timestamp: new Date(),
     });
 
     return NextResponse.json({
-      session: serializeIfcSession(sessionDoc, 0),
+      session: serializeIfcSession(sessionDoc, 1),
     });
   } catch (error) {
     console.error("[API/contractor/ifc/sessions][POST] Error:", error);

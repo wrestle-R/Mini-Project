@@ -53,3 +53,21 @@ export async function getGridFSFileInfo(fileId: string) {
   const files = await cursor.toArray();
   return files[0] || null;
 }
+
+export async function deleteGridFSFiles(fileIds: string[]) {
+  const bucket = getBucket();
+  const uniqueIds = [...new Set(fileIds)].filter((id) => ObjectId.isValid(id));
+
+  await Promise.all(
+    uniqueIds.map(async (fileId) => {
+      try {
+        await bucket.delete(new ObjectId(fileId));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (!message.includes("FileNotFound")) {
+          throw error;
+        }
+      }
+    })
+  );
+}

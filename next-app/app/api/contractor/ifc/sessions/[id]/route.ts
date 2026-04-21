@@ -6,6 +6,7 @@ import IfcChatMessage from "@/lib/models/IfcChatMessage";
 import IfcVersion from "@/lib/models/IfcVersion";
 import { getContractorIdFromAuthHeader } from "@/lib/ifc/auth";
 import { serializeIfcSession } from "@/lib/ifc/serializers";
+import { deleteGridFSFiles } from "@/lib/ifc/gridfs";
 
 export async function GET(
   req: Request,
@@ -37,7 +38,7 @@ export async function GET(
       IfcChatMessage.find({ sessionId: session._id }).sort({ timestamp: 1 }),
       IfcVersion.find({ sessionId: session._id })
         .sort({ versionNumber: -1 })
-        .select("versionNumber label createdAt"),
+        .select("versionNumber label source createdAt"),
     ]);
 
     return NextResponse.json({
@@ -50,17 +51,81 @@ export async function GET(
         plan: message.plan || [],
         actions: message.actions || [],
         error: message.error || undefined,
+        versionId: message.versionId?.toString() || null,
+        versionNumber: message.versionNumber || null,
         timestamp: message.timestamp,
       })),
       versions: versions.map((version) => ({
         id: version._id.toString(),
         versionNumber: version.versionNumber,
         label: version.label,
+        source: version.source,
+        isCurrent: session.currentVersionId?.toString() === version._id.toString(),
         createdAt: version.createdAt,
       })),
     });
   } catch (error) {
     console.error("[API/contractor/ifc/sessions/:id][GET] Error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const contractorId = getContractorIdFromAuthHeader(
+      req.headers.get("authorization")
+    );
+    if (!contractorId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Invalid session id" }, { status: 400 });
+    }
+
+    await dbConnect();
+
+    const session = await IfcSession.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      contractorId: new mongoose.Types.ObjectId(contractorId),
+    });
+    if (!session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    const versions = await IfcVersion.find({ sessionId: session._id }).select(
+      "glbFileId jsonFileId metadataFileId"
+    );
+
+    const assetIds = [
+      session.currentGlbFileId,
+      session.currentJsonFileId,
+      session.currentMetadataFileId,
+      ...versions.flatMap((version) => [
+        version.glbFileId,
+        version.jsonFileId,
+        version.metadataFileId,
+      ]),
+    ];
+
+    await Promise.all([
+      IfcChatMessage.deleteMany({ sessionId: session._id }),
+      IfcVersion.deleteMany({ sessionId: session._id }),
+      IfcSession.deleteOne({ _id: session._id }),
+    ]);
+
+    await deleteGridFSFiles(assetIds);
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[API/contractor/ifc/sessions/:id][DELETE] Error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
