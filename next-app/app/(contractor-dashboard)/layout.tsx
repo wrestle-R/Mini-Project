@@ -37,7 +37,7 @@ export default function ContractorDashboardLayout({
         <ContractorSidebar />
         <main className="w-full min-h-screen bg-background">
           <ContractorTopbar />
-          <div className="p-4 md:p-6 relative">{children}</div>
+          <div className="p-4 pt-10 md:p-6 md:pt-12 relative">{children}</div>
         </main>
       </SidebarProvider>
     </div>
