@@ -7,7 +7,7 @@ import IfcVersion from "@/lib/models/IfcVersion";
 import { getContractorIdFromAuthHeader } from "@/lib/ifc/auth";
 import { downloadGridFSFileAsBuffer } from "@/lib/ifc/gridfs";
 import { applyInstructionToModel, type IfcModelRecord } from "@/lib/ifc/engine";
-import { normalizeIfcInstructionWithGemini } from "@/lib/ifc/gemini";
+import { normalizeIfcInstructionWithGroq } from "@/lib/ifc/groq";
 import {
   createIfcVersionSnapshot,
   getVersionCount,
@@ -240,7 +240,7 @@ export async function POST(
         selectedContexts
       );
 
-      const normalized = await normalizeIfcInstructionWithGemini({
+      const normalized = await normalizeIfcInstructionWithGroq({
         message,
         selectedContexts,
       });
@@ -249,41 +249,41 @@ export async function POST(
       let result = directResult;
 
       if (normalized?.instruction) {
-        const geminiResult = applyInstructionToModel(
+        const groqResult = applyInstructionToModel(
           cloneIfcModel(baseModel),
           normalized.instruction,
           selectedContexts
         );
 
-        const preferGemini =
-          geminiResult.updated &&
+        const preferGroq =
+          groqResult.updated &&
           (
             !directResult.updated ||
             selectedContexts.length > 0 ||
             normalized.instruction.trim().toLowerCase() !== message.trim().toLowerCase()
           );
 
-        if (preferGemini) {
+        if (preferGroq) {
           result = {
-            ...geminiResult,
+            ...groqResult,
             assistant: {
-              ...geminiResult.assistant,
+              ...groqResult.assistant,
               explanation: normalized.reason
-                ? `${geminiResult.assistant.explanation} ${normalized.reason}`
-                : geminiResult.assistant.explanation,
+                ? `${groqResult.assistant.explanation} ${normalized.reason}`
+                : groqResult.assistant.explanation,
             },
-          };
+          } as any;
           effectiveInstruction = normalized.instruction;
         } else if (!directResult.updated) {
           result = {
-            ...geminiResult,
+            ...groqResult,
             assistant: {
-              ...geminiResult.assistant,
+              ...groqResult.assistant,
               explanation: normalized.reason
-                ? `${geminiResult.assistant.explanation} ${normalized.reason}`
-                : geminiResult.assistant.explanation,
+                ? `${groqResult.assistant.explanation} ${normalized.reason}`
+                : groqResult.assistant.explanation,
             },
-          };
+          } as any;
           effectiveInstruction = normalized.instruction;
         }
       }

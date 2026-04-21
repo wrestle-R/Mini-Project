@@ -1,6 +1,3 @@
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
-
 interface SelectedContext {
   element_id?: string;
   element_type?: string;
@@ -8,7 +5,7 @@ interface SelectedContext {
   property_summary?: string;
 }
 
-interface GeminiNormalizationResult {
+interface GroqNormalizationResult {
   instruction: string;
   reason?: string;
 }
@@ -22,12 +19,13 @@ function extractJsonObject(text: string) {
   return text.slice(start, end + 1);
 }
 
-export async function normalizeIfcInstructionWithGemini(params: {
+export async function normalizeIfcInstructionWithGroq(params: {
   message: string;
   selectedContexts: SelectedContext[];
 }) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
+    console.error("GROQ_API_KEY is not defined");
     return null;
   }
 
@@ -65,46 +63,34 @@ export async function normalizeIfcInstructionWithGemini(params: {
   ].join("\n");
 
   try {
-    const response = await fetch(GEMINI_URL, {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-goog-api-key": apiKey,
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: "application/json",
-        },
+        model: "llama3-70b-8192",
+        messages: [{ role: "system", content: prompt }],
+        temperature: 0.1,
+        response_format: { type: "json_object" }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
-      console.error("[Gemini][normalizeIfcInstruction] HTTP error:", response.status, errorText);
+      console.error("[Groq][normalizeIfcInstruction] HTTP error:", response.status, errorText);
       return null;
     }
 
-    const payload = (await response.json()) as {
-      candidates?: Array<{
-        content?: {
-          parts?: Array<{ text?: string }>;
-        };
-      }>;
-    };
-
-    const text = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const payload = await response.json();
+    const text = payload.choices?.[0]?.message?.content?.trim();
     if (!text) {
       return null;
     }
 
     const jsonText = extractJsonObject(text) || text;
-    const parsed = JSON.parse(jsonText) as GeminiNormalizationResult;
+    const parsed = JSON.parse(jsonText) as GroqNormalizationResult;
     const instruction = parsed.instruction?.trim();
     if (!instruction) {
       return null;
@@ -112,10 +98,15 @@ export async function normalizeIfcInstructionWithGemini(params: {
 
     return {
       instruction,
-      reason: parsed.reason?.trim() || "Gemini normalized the request.",
+      reason: parsed.reason?.trim() || "Groq normalized the request.",
     };
   } catch (error) {
-    console.error("[Gemini][normalizeIfcInstruction] Error:", error);
+    console.error("[Groq][normalizeIfcInstruction] Error:", error);
     return null;
   }
 }
+
+
+
+
+
