@@ -257,8 +257,12 @@ def score_candidates(
             tile = _tile_bbox(col, row, bbox.min_lon, bbox.min_lat, step_lon, step_lat)
             
             b_overlap = _building_overlap(tile, osm)
-            if free_land_only and b_overlap > 0:
-                continue
+            if free_land_only:
+                if b_overlap > 0:
+                    continue
+                w_overlap = _water_overlap(tile, osm)
+                if w_overlap:
+                    continue
 
             centroid = _centroid(tile)
             area = _area_sqm(tile)
@@ -324,6 +328,17 @@ def score_candidates(
     # Sort by score descending, return top-N
     candidates.sort(key=lambda c: c.score, reverse=True)
     return candidates[:top_n]
+
+def _water_overlap(bbox: BoundingBox, osm: OsmContextResult) -> bool:
+    """Return True if the bbox overlaps with any water feature."""
+    for ex in osm.exclusions:
+        if ex.tags.get("natural") == "water" and ex.geometry and ex.geometry.get("type") == "Polygon":
+            coords = ex.geometry["coordinates"][0]
+            for c in coords:
+                if bbox.min_lon <= c[0] <= bbox.max_lon and bbox.min_lat <= c[1] <= bbox.max_lat:
+                    return True
+    return False
+
 def _exclusion_overlap(bbox: BoundingBox, osm: OsmContextResult) -> bool:
     """Return True if the bbox overlaps with any exclusion feature (water, forest)."""
     for ex in osm.exclusions:

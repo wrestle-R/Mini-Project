@@ -605,6 +605,67 @@ export function buildWorkflowReport(params: {
 
   const estimatedDurationDays = Math.max(1, phaseDays.structural + phaseDays.envelope + phaseDays.finishes + phaseDays.services);
 
+  const MATERIAL_RATES: Record<string, number> = {
+    "reinforced concrete": 5000, // per cum
+    "TMT rebar steel": 65, // per kg
+    "formwork / shuttering": 350, // per sqm
+    "cement plaster": 250, // per sqm
+    "screed / finishing mortar": 200, // per sqm
+    "waterproofing membrane": 450, // per sqm
+    "structural steel": 85, // per kg
+    "shop primer / coating": 150, // per sqm
+    "high-strength bolts": 4000, // per set
+    "patch repair mortar": 200, // per sqm
+    "finishing mortar / treads": 300, // per sqm
+    "solid-core door leaf": 6000, // per each
+    "door frame": 400, // per lm
+    "hardware set": 1200, // per set
+    "sealant / filler": 80, // per lm
+    "laminated glass": 1800, // per sqm
+    "aluminum window frame": 500, // per lm
+    "sealant / gasket": 80, // per lm
+    "fixing hardware": 600, // per set
+  };
+
+  const LABOR_RATES: Record<string, number> = {
+    supervisor: 1500, // per day
+    mason: 900, // per day
+    steel_fixer: 900, // per day
+    carpenter: 900, // per day
+    helper: 600, // per day
+    glazier: 1000, // per day
+    fabricator: 1000, // per day
+  };
+
+  let totalMaterialCost = 0;
+  const materialCosts: Record<string, number> = {};
+  for (const [key, item] of Object.entries(materialEstimate)) {
+    const [material] = key.split(":");
+    const rate = MATERIAL_RATES[material] || 0;
+    const cost = rate * item.quantity;
+    materialCosts[key] = cost;
+    totalMaterialCost += cost;
+  }
+
+  let totalLaborCostPerDay = 0;
+  for (const worker of recommendedWorkerMix) {
+    const rate = LABOR_RATES[worker.role] || 600;
+    totalLaborCostPerDay += rate * worker.count;
+  }
+  const totalLaborCost = totalLaborCostPerDay * estimatedDurationDays;
+  const subtotalCost = totalMaterialCost + totalLaborCost;
+  const contingencyCost = subtotalCost * 0.1; // 10% contingency
+  const totalBudget = subtotalCost + contingencyCost;
+
+  const costEstimate = {
+    totalMaterialCost: Math.round(totalMaterialCost),
+    totalLaborCost: Math.round(totalLaborCost),
+    subtotalCost: Math.round(subtotalCost),
+    contingencyCost: Math.round(contingencyCost),
+    totalBudget: Math.round(totalBudget),
+    materialCosts,
+  };
+
   const elementAssessments = assessments.map((assessment) => ({
     id: assessment.id,
     name: assessment.name,
@@ -665,6 +726,7 @@ export function buildWorkflowReport(params: {
       totalWorkerRange,
       recommendedWorkerMix,
     },
+    costEstimate,
     projectHandoff: {
       warnings,
       assumptions: [

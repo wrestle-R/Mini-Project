@@ -5,7 +5,7 @@ InfraSaathi is a sophisticated GIS platform designed for intelligent land select
 ## 🚀 Key Features
 
 ### 1. Agentic Spatial Intelligence
-- **Natural Language Interaction**: A LangGraph-powered AI agent (InfraSaathi Agent) handles complex spatial queries like *"Find 5000sqm of empty land near a forest in Mumbai"*.
+- **Natural Language Interaction**: A LangGraph-powered AI agent handles complex spatial queries like *"Find 5000sqm of empty land near a forest in Mumbai"*.
 - **Multi-Tool reasoning**: The agent uses geocoding, OSM context fetching, and custom scoring engines to rank candidate parcels.
 - **Contextual Understanding**: Handles proximity to highways, forests, water bodies, and existing urban infrastructure.
 

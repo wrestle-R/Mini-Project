@@ -92,6 +92,14 @@ type ReportPayload = {
     assumptions: string[];
     nextStep: string;
   };
+  costEstimate?: {
+    totalMaterialCost: number;
+    totalLaborCost: number;
+    subtotalCost: number;
+    contingencyCost: number;
+    totalBudget: number;
+    materialCosts: Record<string, number>;
+  };
 };
 
 type ReportResponse = {
@@ -207,7 +215,7 @@ export default function GisReportPage() {
         lat: typeof centroid[1] === "number" ? centroid[1] : null,
         lng: typeof centroid[0] === "number" ? centroid[0] : null,
       },
-      budget: "",
+      budget: data.report.payload.costEstimate ? `$${formatNumber(data.report.payload.costEstimate.totalBudget, 0)}` : "",
       source: {
         sessionId: data.session.id,
         reportId: data.report.id,
@@ -577,6 +585,30 @@ export default function GisReportPage() {
               ))}
             </div>
           </SectionCard>
+
+          {payload.costEstimate && (
+            <SectionCard title="Financial Estimate" icon={<Building2 className="h-4 w-4" />}>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Material Cost</p>
+                  <p className="mt-2 text-xl font-semibold">${formatNumber(payload.costEstimate.totalMaterialCost, 0)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Labor Cost</p>
+                  <p className="mt-2 text-xl font-semibold">${formatNumber(payload.costEstimate.totalLaborCost, 0)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Contingency (10%)</p>
+                  <p className="mt-2 text-xl font-semibold">${formatNumber(payload.costEstimate.contingencyCost, 0)}</p>
+                </div>
+                <div className="col-span-full rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 mt-2">
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/70">Estimated Total Budget</p>
+                  <p className="mt-2 text-3xl font-bold text-emerald-100">${formatNumber(payload.costEstimate.totalBudget, 0)}</p>
+                  <p className="mt-1 text-[11px] text-white/50">Includes materials, labor, and 10% contingency.</p>
+                </div>
+              </div>
+            </SectionCard>
+          )}
 
           <SectionCard title="Project Handoff" icon={<Building2 className="h-4 w-4" />}>
             <div className="space-y-4 text-sm text-white/75">

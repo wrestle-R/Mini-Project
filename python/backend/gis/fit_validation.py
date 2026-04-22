@@ -542,17 +542,50 @@ async def validate_fit(req: FitValidationRequest) -> FitValidationResult:
                     has_building_collision = True
                     break
 
+        has_water_collision = False
+        for ex in osm.exclusions:
+            if ex.tags.get("natural") == "water":
+                geom = ex.geometry
+                if not geom: continue
+                
+                # Project water to local XY
+                def project_coords(coords: list[list[float]]) -> list[tuple[float, float]]:
+                    return [_to_local_xy(c[0], c[1], origin_lon, origin_lat) for c in coords]
+                
+                w_poly = None
+                if geom["type"] == "Polygon":
+                    rings = geom["coordinates"]
+                    if rings:
+                        w_poly = Polygon(project_coords(rings[0]), [project_coords(r) for r in rings[1:]]).buffer(0)
+                elif geom["type"] == "MultiPolygon":
+                    w_polys = []
+                    for p_coords in geom["coordinates"]:
+                        if p_coords:
+                            w_polys.append(Polygon(project_coords(p_coords[0]), [project_coords(r) for r in p_coords[1:]]).buffer(0))
+                    if w_polys:
+                        w_poly = MultiPolygon(w_polys).buffer(0)
+                
+                if w_poly and w_poly.intersects(model_poly):
+                    overlap = w_poly.intersection(model_poly).area
+                    if overlap > 1.0:
+                        has_water_collision = True
+                        break
+
     messages: list[str] = []
     if has_building_collision:
         fit_status = "invalid"
         messages.append("⛔ CRITICAL: Model footprint overlaps with an existing building on the map.")
+        
+    if has_water_collision:
+        fit_status = "invalid"
+        messages.append("⛔ CRITICAL: Model footprint overlaps with a water body.")
     
     if fit_status == "valid":
         messages.append("✅ Model footprint fits fully inside the selected land polygon.")
     elif fit_status == "partial":
         messages.append("⚠️ Model footprint partially overlaps land boundary.")
     else:
-        if not has_building_collision:
+        if not has_building_collision and not has_water_collision:
             messages.append("❌ Model footprint does not fit the selected land polygon.")
 
     if overflow_direction and overflow_distance > 0:
@@ -580,6 +613,7 @@ async def validate_fit(req: FitValidationRequest) -> FitValidationResult:
         road_access=road_access, # placeholder as I simplified
         nearby_building_access=nearby_building_access, # placeholder
         has_building_collision=has_building_collision,
+        has_water_collision=has_water_collision,
         inside_geometry=inside_geojson,
         overflow_geometry=overflow_geojson,
         messages=messages,

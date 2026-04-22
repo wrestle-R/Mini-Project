@@ -139,7 +139,6 @@ export default function GisLandSelectionPage() {
     estimatedDurationDays: number;
     workerMix: { role: string; count: number }[];
   } | null>(null);
-  const [completingValidation, setCompletingValidation] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
 
   // Load parcels from localStorage
@@ -554,73 +553,51 @@ export default function GisLandSelectionPage() {
     }
   }, [selectedPolygon, modelDimensions, modelScale, rotationDeg, roadWarningDistanceM, nearbyBuildingDistanceM, modelOffsetXM, modelOffsetYM, validatingFit]);
 
-  const handleCompleteValidation = useCallback(async () => {
-    if (!token || !selectedSession || !selectedPolygon || !modelDimensions || !fitResult || completingValidation) return;
 
-    setCompletingValidation(true);
-    try {
-      const res = await fetch("/api/contractor/workflow/gis-completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          sessionId: selectedSession.id,
-          ifcVersionNumber: selectedSession.currentVersionNumber,
-          parcelGeojson: selectedPolygon.geojson,
-          parcelSummary: {
-            areaSqm: selectedPolygon.areaSqm,
-            centroid: selectedPolygon.centroid,
-          },
-          modelDimensions,
-          rotationDeg,
-          roadWarningDistanceM,
-          fitResult,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Could not complete validation");
-
-      setValidationSnapshotId(data.validationSnapshot.id);
-      setSelectedSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              workflowState: data.workflow.state,
-              currentValidationSnapshotId: data.validationSnapshot.id,
-              currentReportId: null,
-            }
-          : prev
-      );
-      setReportSummary(null);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Could not complete validation");
-    } finally {
-      setCompletingValidation(false);
-    }
-  }, [
-    token,
-    selectedSession,
-    selectedPolygon,
-    modelDimensions,
-    fitResult,
-    completingValidation,
-    rotationDeg,
-    roadWarningDistanceM,
-  ]);
 
   const handleGenerateReport = useCallback(async () => {
-    const workflowState = selectedSession?.workflowState || "draft";
-    const effectiveSnapshotId = validationSnapshotId || selectedSession?.currentValidationSnapshotId || null;
-    if (!token || !selectedSession || !effectiveSnapshotId || generatingReport) return;
-    if (workflowState !== "land_validated" && workflowState !== "report_generated") {
-      alert("Please complete the validation step before generating the report.");
-      return;
-    }
+    let workflowState = selectedSession?.workflowState || "draft";
+    let effectiveSnapshotId = validationSnapshotId || selectedSession?.currentValidationSnapshotId || null;
+    
+    if (!token || !selectedSession || generatingReport) return;
 
     setGeneratingReport(true);
     try {
+      if (workflowState !== "land_validated" && workflowState !== "report_generated") {
+        if (!selectedPolygon || !modelDimensions || !fitResult) {
+            alert("Please validate the land placement first.");
+            setGeneratingReport(false);
+            return;
+        }
+
+        const compRes = await fetch("/api/contractor/workflow/gis-completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              sessionId: selectedSession.id,
+              ifcVersionNumber: selectedSession.currentVersionNumber,
+              parcelGeojson: selectedPolygon.geojson,
+              parcelSummary: {
+                areaSqm: selectedPolygon.areaSqm,
+                centroid: selectedPolygon.centroid,
+              },
+              modelDimensions,
+              rotationDeg,
+              roadWarningDistanceM,
+              fitResult,
+            }),
+          });
+          const compData = await compRes.json();
+          if (!compRes.ok) throw new Error(compData?.error || "Could not save validation state");
+          
+          effectiveSnapshotId = compData.validationSnapshot.id;
+          setValidationSnapshotId(effectiveSnapshotId);
+          workflowState = compData.workflow.state;
+      }
+
       const res = await fetch("/api/contractor/workflow/reports", {
         method: "POST",
         headers: {
@@ -649,6 +626,7 @@ export default function GisLandSelectionPage() {
               ...prev,
               workflowState: data.workflow.state,
               currentReportId: data.report.id,
+              currentValidationSnapshotId: effectiveSnapshotId,
             }
           : prev
       );
@@ -658,7 +636,7 @@ export default function GisLandSelectionPage() {
     } finally {
       setGeneratingReport(false);
     }
-  }, [token, selectedSession, validationSnapshotId, generatingReport, router]);
+  }, [token, selectedSession, validationSnapshotId, generatingReport, router, selectedPolygon, modelDimensions, fitResult, rotationDeg, roadWarningDistanceM]);
 
   return (
     <div className="flex flex-col h-screen bg-[#080b12] overflow-hidden">
@@ -970,7 +948,7 @@ export default function GisLandSelectionPage() {
 
             {fitResult && (
               <div className={`rounded-lg p-2.5 border ${
-                fitResult.has_building_collision ? "bg-red-500/10 border-red-500/30" :
+                fitResult.has_building_collision || fitResult.has_water_collision ? "bg-red-500/10 border-red-500/30" :
                 fitResult.fit_status === "valid"
                   ? "bg-emerald-500/10 border-emerald-500/30"
                   : fitResult.fit_status === "partial"
@@ -978,7 +956,7 @@ export default function GisLandSelectionPage() {
                     : "bg-red-500/10 border-red-500/30"
               }`}>
                 <div className="flex items-center gap-2 text-xs mb-1.5">
-                  {fitResult.has_building_collision ? (
+                  {fitResult.has_building_collision || fitResult.has_water_collision ? (
                      <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
                   ) : fitResult.fit_status === "valid" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -986,13 +964,13 @@ export default function GisLandSelectionPage() {
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
                   )}
                   <span className="text-white/85 font-semibold uppercase">
-                    {fitResult.has_building_collision ? "Collision Detected" : fitResult.fit_status}
+                    {fitResult.has_building_collision || fitResult.has_water_collision ? "Collision Detected" : fitResult.fit_status}
                   </span>
                   <span className="ml-auto text-white/70">Fit: {fitResult.fit_score.toFixed(1)}%</span>
                 </div>
                 <div className="text-[11px] text-white/70 grid grid-cols-2 gap-x-3 gap-y-1">
                   <span>Land: {fitResult.land_area_sqm.toLocaleString()} sqm</span>
-                  <span className={fitResult.has_building_collision ? "text-red-400 font-bold" : ""}>
+                  <span className={fitResult.has_building_collision || fitResult.has_water_collision ? "text-red-400 font-bold" : ""}>
                     Footprint: {fitResult.model_footprint_area_sqm.toLocaleString()} sqm
                   </span>
                   <span>Utilization: {fitResult.utilization_ratio.toFixed(1)}%</span>
@@ -1000,6 +978,9 @@ export default function GisLandSelectionPage() {
                   <span>Overflow: {fitResult.overflow_area_sqm.toFixed(1)} sqm</span>
                   <span className={fitResult.has_building_collision ? "text-red-400 col-span-2 mt-1 font-medium bg-red-500/10 p-1 rounded" : "hidden"}>
                     ⛔ Overlaps with existing building
+                  </span>
+                  <span className={fitResult.has_water_collision ? "text-red-400 col-span-2 mt-1 font-medium bg-red-500/10 p-1 rounded" : "hidden"}>
+                    ⛔ Overlaps with water body
                   </span>
                 </div>
                 <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
@@ -1013,26 +994,11 @@ export default function GisLandSelectionPage() {
             )}
 
             {fitResult?.fit_status === "valid" && (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={handleCompleteValidation}
-                    disabled={!selectedSession || completingValidation}
-                  className="text-xs px-3 py-2 rounded-lg bg-indigo-500/20 border border-indigo-500/35 text-indigo-200 disabled:opacity-40"
-                >
-                  {completingValidation
-                    ? "Completing..."
-                    : selectedSession?.workflowState === "land_validated" || selectedSession?.workflowState === "report_generated"
-                      ? "Completed"
-                      : "Complete"}
-                </button>
+              <div className="grid grid-cols-1 gap-2">
                 <button
                   onClick={handleGenerateReport}
-                    disabled={
-                      generatingReport ||
-                      !(validationSnapshotId || selectedSession?.currentValidationSnapshotId) ||
-                      (selectedSession?.workflowState !== "land_validated" && selectedSession?.workflowState !== "report_generated")
-                    }
-                  className="text-xs px-3 py-2 rounded-lg bg-cyan-500/20 border border-cyan-500/35 text-cyan-200 disabled:opacity-40"
+                    disabled={generatingReport || !selectedSession}
+                  className="text-xs px-3 py-2.5 rounded-lg bg-cyan-500/20 border border-cyan-500/35 text-cyan-200 disabled:opacity-40 hover:bg-cyan-500/30 transition-all font-medium uppercase tracking-wide"
                 >
                   {generatingReport ? "Generating..." : "Generate Report"}
                 </button>

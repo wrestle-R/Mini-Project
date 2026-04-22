@@ -165,6 +165,7 @@ class FitValidationResult(BaseModel):
     road_access: RoadAccessResult
     nearby_building_access: RoadAccessResult
     has_building_collision: bool = False
+    has_water_collision: bool = False
     inside_geometry: Optional[dict] = None
     overflow_geometry: Optional[dict] = None
     messages: List[str]
