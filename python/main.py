@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,7 +11,7 @@ import os
 import shutil
 import uuid
 import json
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 # IFC Processing Pipeline
 from backend.services.model_builder import build_internal_model
@@ -23,13 +23,49 @@ from backend.services.model_editor import execute_action, validate_model, ModelE
 
 import sys
 
-# Add SmartAttendance to sys.path to allow internal imports to work
-sys.path.append(os.path.join(os.getcwd(), "SmartAttendance"))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SMART_ATTENDANCE_DIR = os.path.join(BASE_DIR, "SmartAttendance")
+
+# Add SmartAttendance to sys.path to allow internal imports to work from any cwd.
+if SMART_ATTENDANCE_DIR not in sys.path:
+    sys.path.append(SMART_ATTENDANCE_DIR)
 
 # Adjusted imports for parent directory usage
-from SmartAttendance.recognition import load_resources, process_frame_core
+from SmartAttendance.recognition import load_resources, process_frame_core, SIMILARITY_THRESHOLD
 from SmartAttendance.liveness import check_liveness_frame, reset_liveness
 from SmartAttendance.register_faces import register_new_face
+from SmartAttendance.face_utils import extract_face_tensor, get_embedding
+from SmartAttendance.mock_db import get_employee_details
+
+import datetime
+
+ATTENDANCE_FILE = os.path.join("data", "attendance", "attendance_log.json")
+FACE_FALLBACK_THRESHOLD = max(0.5, SIMILARITY_THRESHOLD - 0.05)
+
+def _load_attendance_log() -> List[Dict[str, Any]]:
+    os.makedirs(os.path.dirname(ATTENDANCE_FILE), exist_ok=True)
+
+    if not os.path.exists(ATTENDANCE_FILE):
+        with open(ATTENDANCE_FILE, "w") as f:
+            json.dump([], f)
+        return []
+
+    try:
+        with open(ATTENDANCE_FILE, "r") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception as e:
+        print(f"Warning: Failed to load attendance log: {e}. Starting with empty log.")
+
+    return []
+
+def _save_attendance_log() -> None:
+    os.makedirs(os.path.dirname(ATTENDANCE_FILE), exist_ok=True)
+    with open(ATTENDANCE_FILE, "w") as f:
+        json.dump(attendance_log, f, indent=2)
+
+attendance_log = _load_attendance_log()
 
 # Global resources
 resources = None
@@ -63,6 +99,164 @@ os.makedirs("data/glb", exist_ok=True)
 app.mount("/models", StaticFiles(directory="models"), name="models")
 app.mount("/data", StaticFiles(directory="data"), name="data")
 
+def process_frame_from_bytes(contents: bytes, source_id: str = "esp32", check_ppe: bool = True):
+    nparr = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if frame is None:
+        raise HTTPException(status_code=400, detail="Invalid image data.")
+
+    person_conf = 0.3 if min(frame.shape[0], frame.shape[1]) <= 480 else 0.5
+    is_alive, liveness_details = check_liveness_frame(frame, source_id)
+    matches, _ = process_frame_core(frame, resources, check_ppe=check_ppe, person_conf=person_conf)
+
+    person_pipeline_count = len(matches)
+    used_face_fallback = False
+    fallback_attempts = 0
+    fallback_face_detected = False
+    fallback_best_score = 0.0
+
+    # ESP32 frames are often close-up faces where person detector may miss.
+    # Fallback to full-frame face recognition to avoid false "no_person_detected" failures.
+    if person_pipeline_count == 0:
+        _, _, detector, encoder, index, id_mapping = resources
+        if index is not None and id_mapping:
+            candidate_frames = [frame]
+            if min(frame.shape[0], frame.shape[1]) <= 480:
+                candidate_frames.append(cv2.resize(frame, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC))
+
+            for candidate in candidate_frames:
+                fallback_attempts += 1
+                candidate_rgb = cv2.cvtColor(candidate, cv2.COLOR_BGR2RGB)
+                face_tensor = extract_face_tensor(candidate_rgb, detector)
+
+                if face_tensor is None:
+                    continue
+
+                fallback_face_detected = True
+                emb = get_embedding(face_tensor, encoder)
+                if emb is None:
+                    continue
+
+                query_vector = np.array([emb]).astype("float32")
+                distances, indices = index.search(query_vector, k=1)
+                score = float(distances[0][0])
+                fallback_best_score = max(fallback_best_score, score)
+
+                matched_idx = int(indices[0][0])
+                employee_id = id_mapping.get(str(matched_idx)) if score > FACE_FALLBACK_THRESHOLD else None
+
+                if employee_id:
+                    details = get_employee_details(employee_id)
+                    matches = [{
+                        "id": employee_id,
+                        "name": details.get("name", f"Employee {employee_id}"),
+                        "score": score,
+                        "bbox": [0, 0, int(frame.shape[1]), int(frame.shape[0])],
+                        "detection_mode": "face_fallback",
+                    }]
+                    used_face_fallback = True
+                    break
+
+    return {
+        "status": "success",
+        "liveness": {
+            "is_alive": is_alive,
+            "details": liveness_details
+        },
+        "matches": matches,
+        "diagnostics": {
+            "frame_size": [int(frame.shape[1]), int(frame.shape[0])],
+            "person_conf": person_conf,
+            "person_pipeline_count": person_pipeline_count,
+            "used_face_fallback": used_face_fallback,
+            "fallback_attempts": fallback_attempts,
+            "fallback_face_detected": fallback_face_detected,
+            "fallback_threshold": FACE_FALLBACK_THRESHOLD,
+            "fallback_best_score": fallback_best_score,
+        },
+    }
+
+
+@app.post("/iot/frame")
+async def iot_frame(request: Request, source_id: str = "esp32_cam_1"):
+    if resources is None:
+        raise HTTPException(status_code=503, detail="Server resources not initialized.")
+
+    contents = await request.body()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty image body.")
+    
+    result = process_frame_from_bytes(contents, source_id=source_id, check_ppe=False)
+
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    new_records = []
+
+    if result["matches"]:
+        for person in result["matches"]:
+            recognized = person.get("id") is not None
+            live_ok = result["liveness"]["is_alive"]
+            is_success = recognized and live_ok
+
+            if is_success:
+                reason = "recognized_and_live"
+            elif recognized:
+                reason = "liveness_failed"
+            else:
+                reason = "face_not_recognized"
+
+            record = {
+                "id": person.get("id"),
+                "name": person.get("name", "Unknown"),
+                "score": float(person.get("score", 0.0)),
+                "status": "success" if is_success else "failure",
+                "reason": reason,
+                "time": timestamp,
+                "source": source_id,
+                "diagnostics": result.get("diagnostics", {}),
+            }
+            attendance_log.append(record)
+            new_records.append(record)
+    else:
+        record = {
+            "id": None,
+            "name": "Unknown",
+            "score": 0.0,
+            "status": "failure",
+            "reason": "no_person_or_face_detected",
+            "time": timestamp,
+            "source": source_id,
+            "diagnostics": result.get("diagnostics", {}),
+        }
+        attendance_log.append(record)
+        new_records.append(record)
+
+    _save_attendance_log()
+
+    result["attendance"] = {
+        "saved": True,
+        "records_added": len(new_records),
+        "records": new_records,
+    }
+
+    return JSONResponse(content=result)
+
+@app.get("/attendance")
+def get_attendance(limit: int = 100):
+    safe_limit = max(1, min(limit, 1000))
+    records = attendance_log[-safe_limit:]
+    return {"count": len(records), "records": records}
+
+@app.get("/attendance/summary")
+def get_attendance_summary():
+    success_count = sum(1 for record in attendance_log if record.get("status") == "success")
+    failure_count = sum(1 for record in attendance_log if record.get("status") == "failure")
+
+    return {
+        "total": len(attendance_log),
+        "success": success_count,
+        "failure": failure_count,
+    }
 
 def _is_conversational_message(message: str) -> bool:
     text = message.strip().lower()

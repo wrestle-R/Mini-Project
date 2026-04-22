@@ -60,7 +60,7 @@ def load_resources(index_file="face_index.faiss", mapping_file="id_mapping.json"
         
     return yolo_person_model, yolo_ppe_model, detector, encoder, index, id_mapping
 
-def process_frame_core(frame, resources, check_ppe=True):
+def process_frame_core(frame, resources, check_ppe=True, person_conf=0.5):
     """
     Core logic to process a frame and return matches.
     
@@ -68,6 +68,7 @@ def process_frame_core(frame, resources, check_ppe=True):
         frame: OpenCV BGR image.
         resources: Tuple (yolo_model, detector, encoder, index, id_mapping)
         check_ppe: Boolean to enable/disable PPE checks.
+        person_conf: Confidence threshold for person detection.
         
     Returns:
         matches: List of dicts with detection info.
@@ -81,7 +82,7 @@ def process_frame_core(frame, resources, check_ppe=True):
 
     # 1. Standard Person Detection (Class 0 in COCO)
     # increased confidence to avoid false positives
-    results_person = yolo_person_model(frame, classes=[0], conf=0.5, verbose=False) 
+    results_person = yolo_person_model(frame, classes=[0], conf=person_conf, verbose=False) 
     
     persons = []
     for result in results_person:
