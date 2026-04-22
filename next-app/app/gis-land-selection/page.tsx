@@ -83,12 +83,12 @@ interface FitValidationResult {
   };
   inside_geometry?: GeoJSON.Geometry | null;
   overflow_geometry?: GeoJSON.Geometry | null;
+  has_building_collision?: boolean;
   messages: string[];
 }
 
 const GIS_BACKEND = "http://localhost:8000";
 const BACKEND_TEST_MODEL_URL = `${GIS_BACKEND}/data/glb/diagnostic_backend_model.glb`;
-const DEFAULT_MODEL_ROTATION_DEG = 90;
 const BACKEND_TEST_MODEL_DIMS: ModelDimensions = {
   width_m: 18,
   depth_m: 8,
@@ -119,9 +119,9 @@ export default function GisLandSelectionPage() {
   const [loadingModel, setLoadingModel] = useState(false);
   const [modelFileName, setModelFileName] = useState<string | null>(null);
   const [modelDimensions, setModelDimensions] = useState<ModelDimensions | null>(null);
-  const [rotationXDeg, setRotationXDeg] = useState(270);
+  const [rotationXDeg, setRotationXDeg] = useState(0);
   const [rotationYDeg, setRotationYDeg] = useState(0);
-  const [rotationDeg, setRotationDeg] = useState(DEFAULT_MODEL_ROTATION_DEG);
+  const [rotationDeg, setRotationDeg] = useState(0);
   const [modelOffsetXM, setModelOffsetXM] = useState(0);
   const [modelOffsetYM, setModelOffsetYM] = useState(0);
   const [modelScale, setModelScale] = useState(1);
@@ -336,7 +336,7 @@ export default function GisLandSelectionPage() {
     setModelDimensions(null);
     setRotationXDeg(0);
     setRotationYDeg(0);
-    setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+    setRotationDeg(0);
     setModelOffsetXM(0);
     setModelOffsetYM(0);
     setModelScale(1);
@@ -362,6 +362,7 @@ export default function GisLandSelectionPage() {
     const depth_m = Math.max(0.01, upAxis === "y" ? size.z : size.y);
     const height_m = Math.max(0.01, upAxis === "y" ? size.y : size.z);
 
+    setModelScale(1);
     return {
       width_m: Number(width_m.toFixed(3)),
       depth_m: Number(depth_m.toFixed(3)),
@@ -377,7 +378,7 @@ export default function GisLandSelectionPage() {
       setModelFileName(null);
       setModelDimensions(null);
       setCurrentGlbUrl(null);
-      setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+      setRotationDeg(0);
       setModelOffsetXM(0);
       setModelOffsetYM(0);
       setModelScale(1);
@@ -400,13 +401,13 @@ export default function GisLandSelectionPage() {
       
       const buffer = await res.arrayBuffer();
       const dims = await detectModelDimensions(buffer);
-      const loadRotation = DEFAULT_MODEL_ROTATION_DEG;
+      const loadRotation = 0;
       
       setModelFileName(session.title);
       setModelDimensions(dims);
       setCurrentGlbUrl(session.currentGlbUrl);
       setSelectedSession(session);
-      setRotationXDeg(270);
+      setRotationXDeg(0);
       setRotationYDeg(0);
       setRotationDeg(loadRotation);
       setModelOffsetXM(0);
@@ -479,9 +480,9 @@ export default function GisLandSelectionPage() {
     setModelDimensions(BACKEND_TEST_MODEL_DIMS);
     setCurrentGlbUrl(BACKEND_TEST_MODEL_URL);
     setSelectedSession(null);
-    setRotationXDeg(270);
+    setRotationXDeg(0);
     setRotationYDeg(0);
-    setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+    setRotationDeg(0);
     setModelOffsetXM(0);
     setModelOffsetYM(0);
     setModelScale(1);
@@ -494,7 +495,7 @@ export default function GisLandSelectionPage() {
       payload: {
         glbUrl: BACKEND_TEST_MODEL_URL,
         center: selectedPolygon.centroid,
-        rotation: DEFAULT_MODEL_ROTATION_DEG,
+        rotation: 0,
         scale: 1,
         modelWidthM: BACKEND_TEST_MODEL_DIMS.width_m,
         modelDepthM: BACKEND_TEST_MODEL_DIMS.depth_m,
@@ -787,14 +788,6 @@ export default function GisLandSelectionPage() {
                 {validatingFit ? "Validating..." : "Validate"}
               </button>
             </div>
-            {selectedPolygon && (
-              <button
-                onClick={handleLoadBackendTestModel}
-                className="w-full text-xs px-3 py-2 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/25 transition-colors"
-              >
-                Load Backend Test Model
-              </button>
-            )}
             {!selectedPolygon && (
               <p className="text-[10px] text-amber-400/80 mt-1">
                 Please select or draw a land parcel first to load a model.
@@ -895,9 +888,9 @@ export default function GisLandSelectionPage() {
                       setModelOffsetXM(0);
                       setModelOffsetYM(0);
                       setModelScale(1);
-                      setRotationXDeg(270);
+                      setRotationXDeg(0);
                       setRotationYDeg(0);
-                      setRotationDeg(DEFAULT_MODEL_ROTATION_DEG);
+                      setRotationDeg(0);
                       setFitResult(null);
                       setValidationSnapshotId(null);
                       setReportSummary(null);
@@ -905,9 +898,9 @@ export default function GisLandSelectionPage() {
                         offsetX: 0,
                         offsetY: 0,
                         scale: 1,
-                        rotationX: 270,
+                        rotationX: 0,
                         rotationY: 0,
-                        rotationZ: DEFAULT_MODEL_ROTATION_DEG,
+                        rotationZ: 0,
                       });
                     }}
                     className="text-[10px] text-white/45 hover:text-white/80"
@@ -977,6 +970,7 @@ export default function GisLandSelectionPage() {
 
             {fitResult && (
               <div className={`rounded-lg p-2.5 border ${
+                fitResult.has_building_collision ? "bg-red-500/10 border-red-500/30" :
                 fitResult.fit_status === "valid"
                   ? "bg-emerald-500/10 border-emerald-500/30"
                   : fitResult.fit_status === "partial"
@@ -984,26 +978,36 @@ export default function GisLandSelectionPage() {
                     : "bg-red-500/10 border-red-500/30"
               }`}>
                 <div className="flex items-center gap-2 text-xs mb-1.5">
-                  {fitResult.fit_status === "valid" ? (
+                  {fitResult.has_building_collision ? (
+                     <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                  ) : fitResult.fit_status === "valid" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   ) : (
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
                   )}
-                  <span className="text-white/85 font-semibold uppercase">{fitResult.fit_status}</span>
-                  <span className="ml-auto text-white/70">Fit Score: {fitResult.fit_score.toFixed(1)}%</span>
+                  <span className="text-white/85 font-semibold uppercase">
+                    {fitResult.has_building_collision ? "Collision Detected" : fitResult.fit_status}
+                  </span>
+                  <span className="ml-auto text-white/70">Fit: {fitResult.fit_score.toFixed(1)}%</span>
                 </div>
                 <div className="text-[11px] text-white/70 grid grid-cols-2 gap-x-3 gap-y-1">
                   <span>Land: {fitResult.land_area_sqm.toLocaleString()} sqm</span>
-                  <span>Footprint: {fitResult.model_footprint_area_sqm.toLocaleString()} sqm</span>
+                  <span className={fitResult.has_building_collision ? "text-red-400 font-bold" : ""}>
+                    Footprint: {fitResult.model_footprint_area_sqm.toLocaleString()} sqm
+                  </span>
                   <span>Utilization: {fitResult.utilization_ratio.toFixed(1)}%</span>
                   <span>Suggested rot: {fitResult.suggested_rotation_deg.toFixed(1)}°</span>
                   <span>Overflow: {fitResult.overflow_area_sqm.toFixed(1)} sqm</span>
-                  <span>
-                    Road: {fitResult.road_access.nearest_road_distance_m == null ? "N/A" : `${fitResult.road_access.nearest_road_distance_m.toFixed(1)}m`}
+                  <span className={fitResult.has_building_collision ? "text-red-400 col-span-2 mt-1 font-medium bg-red-500/10 p-1 rounded" : "hidden"}>
+                    ⛔ Overlaps with existing building
                   </span>
-                  <span>
-                    Nearby building: {fitResult.nearby_building_access.nearest_road_distance_m == null ? "N/A" : `${fitResult.nearby_building_access.nearest_road_distance_m.toFixed(1)}m`}
-                  </span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
+                   {fitResult.messages.map((m, i) => (
+                     <p key={i} className={`text-[10px] leading-snug ${m.includes('⛔') || m.includes('CRITICAL') ? 'text-red-400' : 'text-white/50'}`}>
+                       {m}
+                     </p>
+                   ))}
                 </div>
               </div>
             )}

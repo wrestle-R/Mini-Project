@@ -86,8 +86,12 @@ async def fetch_osm_context(
 
     query = _build_query(bbox, max_road_results, max_landuse_results, max_building_results)
 
+    headers = {
+        "User-Agent": "InfraSaathi-GIS-Intelligence/1.0 (Contact: project-infra-saathi@example.com)"
+    }
+
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(OVERPASS_URL, data={"data": query})
+        resp = await client.post(OVERPASS_URL, data={"data": query}, headers=headers)
         resp.raise_for_status()
         data = resp.json()
 
