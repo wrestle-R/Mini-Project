@@ -23,6 +23,9 @@ from backend.services.model_editor import execute_action, validate_model, ModelE
 
 import sys
 
+# GIS / Spatial Intelligence router
+from backend.gis.router import router as gis_router
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SMART_ATTENDANCE_DIR = os.path.join(BASE_DIR, "SmartAttendance")
 
@@ -88,6 +91,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register GIS / Spatial Intelligence router
+app.include_router(gis_router)
 
 # Ensure directories exist
 os.makedirs("models", exist_ok=True)
