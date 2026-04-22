@@ -49,15 +49,6 @@ type WorkerStats = {
   currentAssignments: number;
 };
 
-type AttendanceRow = {
-  id: string;
-  date: string;
-  projectTitle: string;
-  status: string;
-  checkIn: string;
-  checkOut: string;
-};
-
 const defaultStats: WorkerStats = {
   openOpportunities: 0,
   pendingApplications: 0,
@@ -78,7 +69,6 @@ export function WorkerDashboard() {
 
   const [stats, setStats] = useState<WorkerStats>(defaultStats);
   const [mapProjects, setMapProjects] = useState<MapProject[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [mapFilter, setMapFilter] = useState<MapFilter>("all");
 
   useEffect(() => {
@@ -87,20 +77,13 @@ export function WorkerDashboard() {
       try {
         const idToken = await firebaseUser.getIdToken();
 
-        const [statsRes, attendanceRes] = await Promise.all([
-          fetch("/api/dashboard/worker/stats", {
-            headers: { Authorization: `Bearer ${idToken}` },
-          }),
-          fetch("/api/worker/attendance", {
-            headers: { Authorization: `Bearer ${idToken}` },
-          }),
-        ]);
+        const statsRes = await fetch("/api/dashboard/worker/stats", {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
 
         if (!statsRes.ok) throw new Error("Failed to load dashboard stats");
-        if (!attendanceRes.ok) throw new Error("Failed to load attendance");
 
         const statsData = await statsRes.json();
-        const attendanceData = await attendanceRes.json();
 
         setStats({
           openOpportunities: Number(statsData?.stats?.openOpportunities ?? 0),
@@ -110,7 +93,6 @@ export function WorkerDashboard() {
         });
 
         setMapProjects((statsData?.mapProjects || []) as MapProject[]);
-        setAttendance((attendanceData?.attendance || []) as AttendanceRow[]);
       } catch {
         toast.error("Failed to load worker dashboard");
       }
@@ -294,48 +276,6 @@ export function WorkerDashboard() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Attendance</CardTitle>
-          <CardDescription>
-            Placeholder table for upcoming attendance tracking feature.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">Project</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Check In</th>
-                  <th className="px-3 py-2">Check Out</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attendance.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-6 text-center text-muted-foreground" colSpan={5}>
-                      No attendance records yet.
-                    </td>
-                  </tr>
-                ) : (
-                  attendance.map((row) => (
-                    <tr key={row.id} className="border-t">
-                      <td className="px-3 py-2">{row.date}</td>
-                      <td className="px-3 py-2">{row.projectTitle}</td>
-                      <td className="px-3 py-2">{row.status}</td>
-                      <td className="px-3 py-2">{row.checkIn}</td>
-                      <td className="px-3 py-2">{row.checkOut}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
