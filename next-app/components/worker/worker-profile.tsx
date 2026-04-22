@@ -147,6 +147,13 @@ export function WorkerProfile() {
   const [firebaseToken, setFirebaseToken] = useState<string | null>(null);
   const [basic, setBasic] = useState({ firstName: firstName || "", lastName: lastName || "", phone: phone || "" });
   const [ext, setExt] = useState<IExtProfile>(defaultExt);
+  const [embeddingStatus, setEmbeddingStatus] = useState<null | {
+    exists: boolean;
+    updatedAt?: string;
+    dim?: number;
+    model?: string;
+  }>(null);
+  const [embeddingLoading, setEmbeddingLoading] = useState(false);
 
   useEffect(() => {
     if (!firebaseUser) return;
@@ -157,8 +164,48 @@ export function WorkerProfile() {
         .then(data => setExt({ ...defaultExt, ...data }))
         .catch(() => {})
         .finally(() => setLoadingExt(false));
+
+      fetch("/api/profile/face-embedding", { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          setEmbeddingStatus({
+            exists: Boolean(data?.exists),
+            updatedAt: data?.embedding?.updatedAt,
+            dim: data?.embedding?.dim,
+            model: data?.embedding?.model,
+          });
+        })
+        .catch(() => {});
     });
   }, [firebaseUser]);
+
+  const createOrRefreshEmbedding = async () => {
+    if (!firebaseUser) return;
+    setEmbeddingLoading(true);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/profile/face-embedding", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to create embedding");
+      }
+
+      setEmbeddingStatus({
+        exists: true,
+        updatedAt: data?.embedding?.updatedAt,
+        dim: data?.embedding?.dim,
+        model: data?.embedding?.model,
+      });
+      toast.success("Face embedding created and synced.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create embedding");
+    } finally {
+      setEmbeddingLoading(false);
+    }
+  };
 
   if (!firebaseUid) {
     return <div className="w-full space-y-4"><Skeleton className="h-64 w-full rounded-2xl" /><Skeleton className="h-24 w-full rounded-2xl" /></div>;
@@ -504,6 +551,35 @@ export function WorkerProfile() {
           </motion.div>
 
           {/* Info Banner */}
+          <motion.div variants={itemV}>
+            <CardSection icon={FiShield} title="Face Enrollment" description="Use your uploaded photo to create vector embedding for attendance." accent="bg-sky-500/10 text-sky-600">
+              <div className="flex flex-col gap-3">
+                <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+                  <p>
+                    Status: {embeddingStatus?.exists ? "Enrolled" : "Not enrolled"}
+                    {embeddingStatus?.dim ? ` • ${embeddingStatus.dim}d` : ""}
+                    {embeddingStatus?.model ? ` • ${embeddingStatus.model}` : ""}
+                  </p>
+                  {embeddingStatus?.updatedAt && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Last updated: {new Date(embeddingStatus.updatedAt).toLocaleString("en-IN")}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={createOrRefreshEmbedding}
+                    disabled={embeddingLoading}
+                  >
+                    {embeddingLoading ? "Syncing..." : "Create / Refresh Embedding"}
+                  </Button>
+                </div>
+              </div>
+            </CardSection>
+          </motion.div>
+
           <motion.div variants={itemV} className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-xl p-4 flex gap-4 items-start">
             <div className="mt-0.5 min-w-[20px] text-amber-600">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>

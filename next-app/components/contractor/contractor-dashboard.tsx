@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { FiFolder, FiClock, FiUsers, FiArchive } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 const LeafletMap = dynamic(() => import("@/components/shared/leaflet-map"), {
   ssr: false,
@@ -72,6 +73,25 @@ export function ContractorDashboard() {
   const [stats, setStats] = useState<Stats>(defaultStats);
   const [mapProjects, setMapProjects] = useState<MapProject[]>([]);
   const [mapFilter, setMapFilter] = useState<MapFilter>("all");
+  const [attendanceStats, setAttendanceStats] = useState({
+    total: 0,
+    success: 0,
+    failure: 0,
+    ppeViolations: 0,
+  });
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    Array<{
+      id: string;
+      name: string;
+      status: string;
+      reason: string;
+      source: string;
+      score: number;
+      time: string;
+      ppe: { hard_hat: boolean; vest: boolean; compliant: boolean } | null;
+      frameUrl: string;
+    }>
+  >([]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -89,6 +109,22 @@ export function ContractorDashboard() {
           pastProjects: Number(data?.stats?.pastProjects ?? 0),
         });
         setMapProjects((data?.mapProjects || []) as MapProject[]);
+
+        const attendanceRes = await fetch("/api/dashboard/contractor/attendance", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (attendanceRes.ok) {
+          const attendanceData = await attendanceRes.json();
+          setAttendanceStats(
+            attendanceData?.stats || {
+              total: 0,
+              success: 0,
+              failure: 0,
+              ppeViolations: 0,
+            }
+          );
+          setAttendanceRecords((attendanceData?.records || []).slice(0, 8));
+        }
       } catch {
         toast.error("Failed to load dashboard stats");
       }
@@ -284,6 +320,68 @@ export function ContractorDashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Attendance Monitoring</CardTitle>
+          <CardDescription>
+            Live attendance and PPE compliance from IoT camera frames.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-xl font-semibold">{attendanceStats.total}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Present</p>
+              <p className="text-xl font-semibold text-emerald-600">{attendanceStats.success}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Failures</p>
+              <p className="text-xl font-semibold text-destructive">{attendanceStats.failure}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">PPE Violations</p>
+              <p className="text-xl font-semibold text-amber-600">{attendanceStats.ppeViolations}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {attendanceRecords.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No attendance events yet.</p>
+            ) : (
+              attendanceRecords.map((row) => (
+                <div key={row.id} className="rounded-lg border p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-3">
+                    {row.frameUrl ? (
+                      <div className="h-12 w-16 overflow-hidden rounded-md border bg-muted/40 relative">
+                        <Image src={row.frameUrl} alt="Frame" fill className="object-cover" unoptimized />
+                      </div>
+                    ) : null}
+                    <div>
+                      <p className="text-sm font-medium">{row.name || "Unknown"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(row.time).toLocaleString("en-IN")} • {row.source}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-xs flex items-center gap-2">
+                    <Badge variant={row.status === "success" ? "secondary" : "outline"}>{row.status}</Badge>
+                    {row.ppe && (
+                      <Badge variant={row.ppe.compliant ? "secondary" : "outline"}>
+                        PPE {row.ppe.compliant ? "OK" : "Issue"}
+                      </Badge>
+                    )}
+                    <span className="text-muted-foreground">{(row.score * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

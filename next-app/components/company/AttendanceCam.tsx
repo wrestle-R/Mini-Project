@@ -16,6 +16,8 @@ import {
   Eye,
   Gauge,
 } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
+import Image from "next/image";
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface LivenessData {
@@ -46,6 +48,7 @@ const SOURCE_ID = "web-cam";
 
 // ─── Component ───────────────────────────────────────────────────────
 export function AttendanceCam() {
+  const { token } = useCompany();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -64,6 +67,52 @@ export function AttendanceCam() {
   const [backendStatus, setBackendStatus] = useState<
     "idle" | "connected" | "error"
   >("idle");
+  const [iotLatest, setIotLatest] = useState<{
+    frameUrl: string;
+    name: string;
+    score: number;
+    status: string;
+    source: string;
+    ppe: { hard_hat: boolean; vest: boolean; compliant: boolean } | null;
+    time: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let stop = false;
+
+    const pull = async () => {
+      try {
+        const res = await fetch("/api/attendance/live", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (stop) return;
+        const latest = data?.latest;
+        if (latest) {
+          setIotLatest({
+            frameUrl: latest.frameUrl || "",
+            name: latest.recognizedName || "Unknown",
+            score: Number(latest.score || 0),
+            status: latest.status || "failure",
+            source: latest.source || "",
+            ppe: latest.ppe || null,
+            time: latest.time,
+          });
+        }
+      } catch {
+        // noop
+      }
+    };
+
+    pull();
+    const interval = setInterval(pull, 1000);
+    return () => {
+      stop = true;
+      clearInterval(interval);
+    };
+  }, [token]);
 
   // ── Start Camera ────────────────────────────────────────────────
   const startCamera = useCallback(async () => {
@@ -412,6 +461,43 @@ export function AttendanceCam() {
 
         {/* ── Results Panel ────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-4">
+          <div className="rounded-xl border bg-card p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <ScanFace className="h-4 w-4 text-primary" />
+              <h2 className="font-semibold text-sm">IoT Incoming Frame</h2>
+            </div>
+            {iotLatest ? (
+              <div className="space-y-3">
+                {iotLatest.frameUrl ? (
+                  <div className="relative w-full h-44 rounded-lg overflow-hidden border bg-muted/30">
+                    <Image src={iotLatest.frameUrl} alt="IoT Frame" fill className="object-cover" unoptimized />
+                  </div>
+                ) : null}
+                <div className="text-xs text-muted-foreground">
+                  <p>
+                    {iotLatest.name} • {(iotLatest.score * 100).toFixed(1)}% • {iotLatest.status}
+                  </p>
+                  <p>{new Date(iotLatest.time).toLocaleString("en-IN")} • {iotLatest.source}</p>
+                </div>
+                {iotLatest.ppe && (
+                  <div className="text-xs">
+                    <p className={iotLatest.ppe.compliant ? "text-emerald-600" : "text-destructive"}>
+                      PPE: {iotLatest.ppe.compliant ? "Compliant" : "Non-compliant"}
+                    </p>
+                    {!iotLatest.ppe.compliant && (
+                      <p className="text-destructive/90">
+                        Missing: {!iotLatest.ppe.hard_hat ? "Hard Hat " : ""}
+                        {!iotLatest.ppe.vest ? "Safety Vest" : ""}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Waiting for IoT frame...</p>
+            )}
+          </div>
+
           {/* Liveness Card */}
           <div className="rounded-xl border bg-card p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
