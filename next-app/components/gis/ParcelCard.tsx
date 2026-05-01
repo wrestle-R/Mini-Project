@@ -34,9 +34,12 @@ interface ParcelCardProps {
 }
 
 export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: ParcelCardProps) {
-  const normalizedConfidence = (item.confidence_label || (item.score >= 0.65 ? "high" : item.score >= 0.4 ? "medium" : "low")).toLowerCase();
+  const score = item.score ?? 0;
+  const normalizedConfidence = (
+    item.confidence_label || (score >= 0.65 ? "high" : score >= 0.4 ? "medium" : "low")
+  ).toLowerCase();
   const styles = CONFIDENCE_STYLES[normalizedConfidence] ?? CONFIDENCE_STYLES.low;
-  const scorePercent = Math.round((item.score ?? 0) * 100);
+  const scorePercent = Math.round(score * 100);
   const areaHa = ((item.area_sqm ?? 0) / 10_000).toFixed(2);
   const roadDistance = item.tags?.roadDistance ?? 0;
   const urbanity = item.tags?.urbanity ?? "unknown";

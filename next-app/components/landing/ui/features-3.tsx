@@ -1,177 +1,95 @@
 'use client'
-import { useState } from 'react'
 
-import { Cloud, Cpu, Shield, ChevronRight } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { motion } from 'framer-motion'
+import { Radar, ClipboardCheck, Globe2, Layers3, ArrowUpRight } from 'lucide-react'
 
-type Feature = 'project-management' | 'real-time-updates' | 'contractor-network' | 'safety-compliance'
+const headingClass = 'text-balance text-4xl font-semibold md:text-5xl'
+
+const cards = [
+  {
+    title: 'Unified command center',
+    body: 'Monitor every build, crew, and supplier from a single operational view that updates in real time.',
+    icon: Radar,
+  },
+  {
+    title: 'Audit-ready compliance',
+    body: 'Digital checklists, AI attendance, and evidence trails keep inspections clean and predictable.',
+    icon: ClipboardCheck,
+  },
+  {
+    title: 'Global contractor network',
+    body: 'Source verified contractors, align scope, and lock in timelines without email chaos.',
+    icon: Globe2,
+  },
+  {
+    title: 'Layered BIM insight',
+    body: 'Tie IFC models to schedule and material status so delays surface before they compound.',
+    icon: Layers3,
+  },
+]
 
 export default function Features() {
-    const [feature, setFeature] = useState<Feature>('project-management')
-    return (
-        <section
-            id="features"
-            className="bg-background @container py-24">
-            <div className="@2xl:grid-cols-2 mx-auto grid max-w-5xl gap-6 px-6">
-                <div>
-                    <div>
-                        <h2 className="text-balance text-4xl font-medium">Everything you need to run a build site</h2>
-                        <p className="text-muted-foreground mb-6 mt-4 text-balance">From project planning to contractor coordination—BuildSync gives your team the tools to deliver on time, every time.</p>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            asChild
-                            className="gap-1 pr-1.5">
-                            <Link href="/login">
-                                Get started
-                                <ChevronRight />
-                            </Link>
-                        </Button>
-                    </div>
-                    <div className="mt-16 *:w-full *:cursor-pointer">
-                        <button
-                            onClick={() => setFeature('project-management')}
-                            data-selected={feature === 'project-management'}
-                            className="not-data-[selected=true]:hover:text-foreground not-data-[selected=true]:text-muted-foreground flex items-center gap-3 py-2 text-sm">
-                            <div className="flex size-4 items-center -space-x-2">
-                                <div className="size-3 shrink-0 rounded-full border border-current"></div>
-                                <div className="size-3 shrink-0 rounded-full border border-current"></div>
-                            </div>
-                            <span className="in-data-[selected=true]:text-shadow-[0.2px_0_0_currentColor]">Smart Project Management</span>
-                        </button>
-                        <button
-                            onClick={() => setFeature('real-time-updates')}
-                            data-selected={feature === 'real-time-updates'}
-                            className="not-data-[selected=true]:hover:text-foreground not-data-[selected=true]:text-muted-foreground flex items-center gap-3 py-2 text-sm">
-                            <Cloud className="size-4" />
-                            <span className="in-data-[selected=true]:text-shadow-[0.2px_0_0_currentColor]">Real-time Site Updates</span>
-                        </button>
-                        <button
-                            onClick={() => setFeature('contractor-network')}
-                            data-selected={feature === 'contractor-network'}
-                            className="not-data-[selected=true]:hover:text-foreground not-data-[selected=true]:text-muted-foreground flex items-center gap-3 py-2 text-sm">
-                            <Cpu className="size-4" />
-                            <span className="in-data-[selected=true]:text-shadow-[0.2px_0_0_currentColor]">Contractor Network</span>
-                        </button>
-                        <button
-                            onClick={() => setFeature('safety-compliance')}
-                            data-selected={feature === 'safety-compliance'}
-                            className="not-data-[selected=true]:hover:text-foreground not-data-[selected=true]:text-muted-foreground flex items-center gap-3 py-2 text-sm">
-                            <Shield className="size-4" />
-                            <span className="in-data-[selected=true]:text-shadow-[0.2px_0_0_currentColor]">Safety & Compliance</span>
-                        </button>
-                    </div>
-                </div>
-                <div className="@max-xl:-mx-6 not-dark:bg-linear-to-b not-dark:via-muted relative flex items-center overflow-hidden rounded-3xl *:w-full">
-                    <div
-                        aria-hidden
-                        className={cn('*:bg-linear-to-r not-dark:opacity-50 mask-y-from-65% *:to-muted dark:*:to-foreground/2 absolute inset-0 grid grid-cols-4 duration-300', feature === 'project-management' && '*:bg-linear-to-t grid-cols-1 grid-rows-12', feature === 'contractor-network' && '*:bg-linear-to-l grid-cols-2 dark:opacity-50', feature === 'real-time-updates' && '*:opacity-35')}>
-                        <div />
-                        <div />
-                        <div />
-                        <div />
-                    </div>
-                    {feature === 'project-management' && <ProjectManagementIllustration />}
-                    {feature === 'real-time-updates' && <RealTimeIllustration />}
-                    {feature === 'contractor-network' && <ContractorIllustration />}
-                    {feature === 'safety-compliance' && <SafetyIllustration />}
-                </div>
+  return (
+    <section id="features" className="bg-background py-24">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="grid gap-10 lg:grid-cols-[1fr_1.1fr]">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            viewport={{ once: true }}
+            className="space-y-6"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">Core platform</p>
+            <h2 className={headingClass}>Designed for the pace of modern construction.</h2>
+            <p className="max-w-xl text-balance text-lg text-muted-foreground">
+              Every module is tuned for field conditions, with instant updates, fast offline recovery, and
+              high-clarity reporting that scales from single sites to multi-region portfolios.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button asChild size="lg">
+                <Link href="/signup">
+                  Start a pilot
+                  <ArrowUpRight className="opacity-70" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/login">View live workspace</Link>
+              </Button>
             </div>
-        </section>
-    )
-}
+          </motion.div>
 
-const ProjectManagementIllustration = () => {
-    return (
-        <div
-            aria-hidden
-            className="flex h-44 flex-col justify-center gap-3 px-6 py-4">
-            {[
-                { label: 'Foundation Work', w: '72%', color: 'bg-primary' },
-                { label: 'Structural Frame', w: '48%', color: 'bg-chart-2' },
-                { label: 'MEP Installation', w: '30%', color: 'bg-chart-4' },
-            ].map((item) => (
-                <div key={item.label}>
-                    <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                        <span>{item.label}</span>
-                        <span>{item.w}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
-                        <div
-                            className={`h-full rounded-full ${item.color}`}
-                            style={{ width: item.w }}
-                        />
-                    </div>
-                </div>
-            ))}
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut', delay: 0.1 }}
+            viewport={{ once: true }}
+            className="grid gap-4 md:grid-cols-2"
+          >
+            {cards.map((card, index) => {
+              const Icon = card.icon
+              return (
+                <motion.div
+                  key={card.title}
+                  whileHover={{ y: -4 }}
+                  transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+                  className={`rounded-3xl border border-border bg-card/80 p-6 ${
+                    index === 0 ? 'md:col-span-2' : ''
+                  }`}
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-lg font-semibold text-foreground">{card.title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">{card.body}</p>
+                </motion.div>
+              )
+            })}
+          </motion.div>
         </div>
-    )
-}
-
-const RealTimeIllustration = () => {
-    return (
-        <div
-            aria-hidden
-            className="relative h-44 translate-y-6">
-            <div className="bg-foreground/15 absolute inset-0 mx-auto w-px"></div>
-            <div className="absolute -inset-x-16 top-6 aspect-square rounded-full border"></div>
-            <div className="border-primary mask-l-from-50% mask-l-to-90% mask-r-from-50% mask-r-to-50% absolute -inset-x-16 top-6 aspect-square rounded-full border"></div>
-            <div className="absolute -inset-x-8 top-24 aspect-square rounded-full border"></div>
-            <div className="mask-r-from-50% mask-r-to-90% mask-l-from-50% mask-l-to-50% absolute -inset-x-8 top-24 aspect-square rounded-full border border-lime-500"></div>
-        </div>
-    )
-}
-
-const SafetyIllustration = () => {
-    return (
-        <div
-            aria-hidden
-            className="relative flex size-44 items-center justify-center">
-            <Shield className="absolute inset-0 size-full stroke-[0.1px] opacity-15" />
-            <Shield className="fill-card dark:fill-foreground/10 drop-shadow-black/3 stroke-border size-32 stroke-[0.2px] drop-shadow-xl" />
-        </div>
-    )
-}
-
-const ContractorIllustration = () => {
-    return (
-        <div
-            aria-hidden
-            className="*:bg-foreground/15 flex h-44 justify-between pb-6 pt-12 *:h-full *:w-px">
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div className="bg-primary!"></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div className="bg-primary!"></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div className="bg-primary!"></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div className="bg-primary!"></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div className="bg-primary!"></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div className="bg-primary!"></div>
-        </div>
-    )
+      </div>
+    </section>
+  )
 }

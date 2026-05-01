@@ -174,6 +174,7 @@ export function LocationPicker({ value, onChange, label }: LocationPickerProps) 
           {query && (
             <button
               type="button"
+              aria-label="Clear location"
               onClick={clearSelection}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >

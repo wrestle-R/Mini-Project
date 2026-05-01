@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const sessionId = url.searchParams.get("sessionId");
-    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+    if (!sessionId || !mongoose.Types.ObjectId.isValid(sessionId)) {
       return NextResponse.json({ error: "Invalid session id" }, { status: 400 });
     }
 

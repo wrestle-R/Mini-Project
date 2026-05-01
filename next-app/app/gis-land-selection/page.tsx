@@ -84,10 +84,11 @@ interface FitValidationResult {
   inside_geometry?: GeoJSON.Geometry | null;
   overflow_geometry?: GeoJSON.Geometry | null;
   has_building_collision?: boolean;
+  has_water_collision?: boolean;
   messages: string[];
 }
 
-const GIS_BACKEND = "http://localhost:8000";
+const GIS_BACKEND = process.env.NEXT_PUBLIC_PYTHON_API_BASE_URL || "http://localhost:8000";
 const BACKEND_TEST_MODEL_URL = `${GIS_BACKEND}/data/glb/diagnostic_backend_model.glb`;
 const BACKEND_TEST_MODEL_DIMS: ModelDimensions = {
   width_m: 18,

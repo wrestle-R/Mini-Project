@@ -34,7 +34,7 @@ import { Building2, ChevronUp, LogOut, User } from "lucide-react";
 import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 
-import { FiHome, FiFolder, FiBox } from "react-icons/fi";
+import { FiHome, FiFolder, FiBox, FiPackage } from "react-icons/fi";
 
 /* ─────────────────── Component ─────────────────── */
 
@@ -119,6 +119,22 @@ export function ContractorSidebar() {
                   <Link href="/contractor/ifc-viewer">
                     <FiBox className="h-4 w-4 shrink-0" />
                     <span>IFC Studio</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/contractor/materials")}
+                  tooltip="Materials"
+                  className={cn(
+                    isActive("/contractor/materials") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/contractor/materials">
+                    <FiPackage className="h-4 w-4 shrink-0" />
+                    <span>Materials</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

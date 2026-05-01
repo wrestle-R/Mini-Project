@@ -337,7 +337,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
           properties: {
             ...c,
             reasons: JSON.stringify(c.reasons),
-            color: CONFIDENCE_COLORS[c.confidence_label] ?? "#6b7280",
+            color: CONFIDENCE_COLORS[c.confidence_label || "low"] ?? "#6b7280",
           },
         }));
         map.addSource("suggestions", {
@@ -1289,6 +1289,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
               token?: string;
               modelWidthM?: number;
               modelDepthM?: number;
+              upAxis?: "y" | "z";
             };
             set3DModel(p.glbUrl, p.center, p.rotation, p.scale, p.token, p.modelWidthM, p.modelDepthM, p.upAxis);
             break;

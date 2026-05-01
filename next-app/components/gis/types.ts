@@ -129,22 +129,3 @@ export interface MapEvent {
   type: MapEventType;
   payload: ActionPayload;
 }
-
-// ── GeoJSON globals (minimal if @types/geojson not installed) ─────────────
-declare global {
-  namespace GeoJSON {
-    interface Geometry {
-      type: string;
-      coordinates: unknown;
-    }
-    interface Feature {
-      type: "Feature";
-      geometry: Geometry;
-      properties: Record<string, unknown> | null;
-    }
-    interface FeatureCollection {
-      type: "FeatureCollection";
-      features: Feature[];
-    }
-  }
-}

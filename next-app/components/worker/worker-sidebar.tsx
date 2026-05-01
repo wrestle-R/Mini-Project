@@ -34,7 +34,7 @@ import { Building2, ChevronUp, LogOut, User } from "lucide-react";
 import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 
-import { FiHome, FiFolder } from "react-icons/fi";
+import { FiHome, FiFolder, FiCalendar, FiPackage } from "react-icons/fi";
 
 /* ─────────────────── Component ─────────────────── */
 
@@ -101,6 +101,38 @@ export function WorkerSidebar() {
                   <Link href="/projects">
                     <FiFolder className="h-4 w-4 shrink-0" />
                     <span>Projects</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/attendance")}
+                  tooltip="Attendance"
+                  className={cn(
+                    isActive("/attendance") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/attendance">
+                    <FiCalendar className="h-4 w-4 shrink-0" />
+                    <span>Attendance</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/materials")}
+                  tooltip="Materials"
+                  className={cn(
+                    isActive("/materials") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/materials">
+                    <FiPackage className="h-4 w-4 shrink-0" />
+                    <span>Materials</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

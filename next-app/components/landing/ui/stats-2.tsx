@@ -1,52 +1,119 @@
-import { CSSProperties } from 'react'
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { motion, useInView } from 'framer-motion'
+
+interface StatCounter {
+  label: string
+  value: string
+  suffix: string
+}
+
+const headingClass = 'text-balance text-4xl font-semibold md:text-5xl'
+
+const AnimatedCounter = ({ value, suffix }: { value: number; suffix: string }) => {
+  const [count, setCount] = useState(0)
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: true })
+
+  useEffect(() => {
+    if (!isInView) return
+
+    let frame = 0
+    const total = 70
+    const tick = () => {
+      frame += 1
+      const next = Math.round((frame / total) * value)
+      setCount(next)
+      if (frame < total) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [isInView, value])
+
+  return (
+    <span ref={ref} className="text-foreground">
+      {count.toLocaleString()}{suffix}
+    </span>
+  )
+}
 
 export default function Stats() {
-    return (
-        <section
-            id="about"
-            className="bg-background @container py-24">
-            <div className="mx-auto max-w-5xl px-6">
-                <div className="space-y-4">
-                    <h2 className="text-balance text-4xl font-medium">Built for the construction industry</h2>
-                    <p className="text-muted-foreground text-balance">BuildSync is purpose-built to solve the real challenges of managing construction projects—from coordinating contractors to tracking compliance on-site.</p>
-                </div>
-                <div className="@xl:grid-cols-3 mt-12 grid grid-cols-2 gap-6 text-sm">
-                    <div className="border-y py-6">
-                        <p className="text-muted-foreground text-xl">
-                            <span className="text-foreground font-medium">2,000+</span> Active projects managed.
-                        </p>
-                    </div>
+  const stats: StatCounter[] = [
+    { label: 'Projects coordinated per quarter', value: 2140, suffix: '+' },
+    { label: 'Punch-list items closed on time', value: 98, suffix: '%' },
+    { label: 'Verified contractors onboarded', value: 540, suffix: '+' },
+  ]
 
-                    <div className="border-y py-6">
-                        <p className="text-muted-foreground text-xl">
-                            <span className="text-foreground font-medium">98%</span> Client satisfaction rate.
-                        </p>
-                    </div>
+  return (
+    <section id="about" className="bg-background py-24">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            viewport={{ once: true }}
+            className="space-y-6"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+              Proof of performance
+            </p>
+            <h2 className={headingClass}>Construction leaders stay ahead with measurable outcomes.</h2>
+            <p className="max-w-xl text-balance text-lg text-muted-foreground">
+              BuildSync turns field activity into clear metrics, closing the gap between what was planned
+              and what actually happened on site.
+            </p>
+          </motion.div>
 
-                    <div className="border-y py-6">
-                        <p className="text-muted-foreground text-xl">
-                            <span className="text-foreground font-medium">500+</span> Verified contractors.
-                        </p>
-                    </div>
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut', delay: 0.1 }}
+            viewport={{ once: true }}
+            className="rounded-3xl border border-border bg-card/80 p-6"
+          >
+            <div className="space-y-4">
+              {stats.map((stat) => (
+                <div key={stat.label} className="rounded-2xl border border-border bg-background/70 p-4">
+                  <p className="text-2xl font-semibold">
+                    <AnimatedCounter value={stat.value} suffix={stat.suffix} />
+                  </p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    {stat.label}
+                  </p>
                 </div>
+              ))}
             </div>
-            <div
-                aria-hidden
-                className="mx-auto flex h-72 max-w-5xl items-end justify-between gap-0.5 px-6">
-                {Array.from({ length: 48 }, (_, i) => {
-                    const progress = i / 47
-                    const base = Math.pow(progress, 2.2)
-                    const noise = Math.sin(i * 0.7) * 0.08 + Math.sin(i * 1.3) * 0.05
-                    const height = Math.min(1, Math.max(0.05, base + noise * (0.3 + progress * 0.7)))
-                    return (
-                        <div
-                            key={i}
-                            className="after:h-(--line-height) after:bg-foreground/15 hover:after:bg-primary relative h-full w-px rounded-full duration-200 before:absolute before:inset-0 before:-inset-x-6 after:absolute after:inset-0 after:mt-auto hover:mx-2"
-                            style={{ '--line-height': `${(height * 100).toFixed(2)}%` } as CSSProperties}
-                        />
-                    )
-                })}
-            </div>
-        </section>
-    )
+          </motion.div>
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          transition={{ duration: 0.7, ease: 'easeOut', delay: 0.2 }}
+          viewport={{ once: true }}
+          className="mt-12 rounded-3xl border border-border bg-card/70 p-6"
+        >
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            <span>Weekly site velocity</span>
+            <span>10 sites reporting</span>
+          </div>
+          <div className="mt-4 grid grid-cols-6 gap-2 md:grid-cols-12">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <motion.div
+                key={index}
+                initial={{ height: 18 }}
+                whileInView={{ height: 30 + (index % 4) * 16 }}
+                transition={{ duration: 0.6, delay: index * 0.04 }}
+                viewport={{ once: true }}
+                className="flex items-end"
+              >
+                <div className="h-full w-full rounded-full bg-primary/20" />
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  )
 }

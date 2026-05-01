@@ -70,7 +70,7 @@ export async function normalizeIfcInstructionWithGroq(params: {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "llama3-70b-8192",
+        model: "llama-3.3-70b-versatile",
         messages: [{ role: "system", content: prompt }],
         temperature: 0.1,
         response_format: { type: "json_object" }
@@ -105,8 +105,4 @@ export async function normalizeIfcInstructionWithGroq(params: {
     return null;
   }
 }
-
-
-
-
 

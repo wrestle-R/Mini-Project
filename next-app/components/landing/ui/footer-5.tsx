@@ -4,7 +4,6 @@ import Link from 'next/link'
 const links = [
     { label: 'Features', href: '#features' },
     { label: 'About', href: '#about' },
-    { label: 'Team', href: '#team' },
     { label: 'FAQ', href: '#faq' },
     { label: 'Login', href: '/login' },
     { label: 'Sign Up', href: '/signup' },
@@ -27,7 +26,7 @@ export default function Footer() {
                         <span className="text-base font-bold text-primary">Build</span>
                         <span className="text-base font-bold text-foreground">Sync</span>
                     </Link>
-                    <p className="text-muted-foreground mt-3 max-w-xs text-sm">Smart construction management for companies, contractors, and workers.</p>
+                    <p className="text-muted-foreground mt-3 max-w-xs text-sm">Construction operations, unified and visible from first pour to final handover.</p>
                     <nav className="my-8 flex flex-wrap gap-x-8 gap-y-2">
                         {links.map((link) => (
                             <Link

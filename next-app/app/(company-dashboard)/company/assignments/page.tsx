@@ -182,8 +182,8 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="projectId">Project *</Label>
                 <select
                   id="projectId"
-                  style={{ colorScheme: "dark" }}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm [&>option]:bg-background"
+                  name="projectId"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.projectId}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, projectId: e.target.value }))
@@ -201,8 +201,8 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="contractorId">Contractor *</Label>
                 <select
                   id="contractorId"
-                  style={{ colorScheme: "dark" }}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm [&>option]:bg-background"
+                  name="contractorId"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.contractorId}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, contractorId: e.target.value }))
@@ -220,8 +220,8 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="customerId">Customer (optional)</Label>
                 <select
                   id="customerId"
-                  style={{ colorScheme: "dark" }}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm [&>option]:bg-background"
+                  name="customerId"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.customerId}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, customerId: e.target.value }))

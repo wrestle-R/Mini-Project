@@ -55,6 +55,19 @@ export type WorkerProjectsResponse = {
   projects: WorkerProjectItem[];
 };
 
+export type WorkerAttendanceRow = {
+  id: string;
+  date: string;
+  projectTitle: string;
+  status: string;
+  checkIn: string;
+  checkOut: string;
+};
+
+export type WorkerAttendanceResponse = {
+  attendance: WorkerAttendanceRow[];
+};
+
 export type MinimalWorkerProfile = {
   firstName: string;
   lastName: string;

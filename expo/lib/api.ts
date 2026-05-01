@@ -1,4 +1,5 @@
 import type {
+  WorkerAttendanceResponse,
   DashboardStatsResponse,
   WorkerProjectsResponse,
   WorkerSession,
@@ -73,6 +74,10 @@ export function getWorkerDashboardStats(token: string) {
 
 export function getWorkerProjects(token: string) {
   return request<WorkerProjectsResponse>('/api/worker/projects', { token });
+}
+
+export function getWorkerAttendance(token: string) {
+  return request<WorkerAttendanceResponse>('/api/worker/attendance', { token });
 }
 
 export function applyToWorkerProject(token: string, projectId: string, message: string) {
