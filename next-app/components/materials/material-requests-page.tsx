@@ -122,6 +122,9 @@ export function MaterialRequestsPage({ role }: { role: Role }) {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(role !== "company");
+  const [requesterFilter, setRequesterFilter] = useState<
+    "all" | "worker" | "contractor"
+  >("all");
   const [submitting, setSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [companyNotes, setCompanyNotes] = useState<Record<string, string>>({});
@@ -170,6 +173,12 @@ export function MaterialRequestsPage({ role }: { role: Role }) {
   }, [fetchRequests]);
 
   useEffect(() => {
+    if (role === "company") {
+      setShowForm(false);
+    }
+  }, [role]);
+
+  useEffect(() => {
     if (!form.projectId && projects.length > 0) {
       setForm((prev) => ({ ...prev, projectId: projects[0].id }));
     }
@@ -180,9 +189,17 @@ export function MaterialRequestsPage({ role }: { role: Role }) {
       pending: requests.filter((request) => request.status === "pending").length,
       approved: requests.filter((request) => request.status === "approved").length,
       fulfilled: requests.filter((request) => request.status === "fulfilled").length,
+      worker: requests.filter((request) => request.requestedByRole === "worker").length,
+      contractor: requests.filter((request) => request.requestedByRole === "contractor")
+        .length,
     }),
     [requests]
   );
+
+  const visibleRequests = useMemo(() => {
+    if (role !== "company" || requesterFilter === "all") return requests;
+    return requests.filter((request) => request.requestedByRole === requesterFilter);
+  }, [requesterFilter, requests, role]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -283,6 +300,32 @@ export function MaterialRequestsPage({ role }: { role: Role }) {
           </Button>
         )}
       </div>
+
+      {role === "company" && (
+        <div className="flex flex-wrap gap-2 rounded-xl border bg-muted/20 p-1 w-fit">
+          {[
+            { value: "all", label: "All", count: requests.length },
+            { value: "worker", label: "Workers", count: counts.worker },
+            { value: "contractor", label: "Contractors", count: counts.contractor },
+          ].map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() =>
+                setRequesterFilter(item.value as "all" | "worker" | "contractor")
+              }
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                requesterFilter === item.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {item.label}
+              <span className="ml-2 text-xs text-muted-foreground">{item.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="py-4">
@@ -441,29 +484,39 @@ export function MaterialRequestsPage({ role }: { role: Role }) {
       )}
 
       <div className="grid gap-4">
-        {requests.length === 0 ? (
+        {visibleRequests.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <FiPackage className="mb-3 h-12 w-12 text-muted-foreground/50" />
-              <p className="font-medium text-muted-foreground">No material requests yet</p>
+              <p className="font-medium text-muted-foreground">
+                {role === "company"
+                  ? "No worker or contractor requests yet"
+                  : "No material requests yet"}
+              </p>
               <p className="text-sm text-muted-foreground/70">
-                Requests will appear here once they are created.
+                {role === "company"
+                  ? "Requests will appear here only after a worker or contractor sends one."
+                  : "Requests will appear here once they are created."}
               </p>
             </CardContent>
           </Card>
         ) : (
-          requests.map((request) => (
+          visibleRequests.map((request) => (
             <Card key={request.id} className="overflow-hidden">
               <CardHeader className="gap-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0 space-y-1">
                     <CardTitle className="text-lg">{request.materialName}</CardTitle>
                     <CardDescription>
-                      {request.project?.title || "Project unavailable"} · requested by{" "}
-                      {request.requesterName}
+                      {request.project?.title || "Project unavailable"} ·{" "}
+                      <span className="capitalize">{request.requestedByRole}</span>{" "}
+                      request by {request.requesterName}
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary" className="capitalize">
+                      {request.requestedByRole}
+                    </Badge>
                     <StatusBadge status={request.status} />
                     <Badge variant="outline" className={urgencyClass(request.urgency)}>
                       {request.urgency} urgency
