@@ -2,7 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { BriefcaseIcon, CheckCheckIcon, ClipboardListIcon, TriangleAlertIcon } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
@@ -76,20 +76,74 @@ export default function DashboardTab() {
           project.location?.lat != null &&
           project.location?.lng != null &&
           !isNaN(Number(project.location.lat)) &&
-          !isNaN(Number(project.location.lng)) &&
-          project.timeline === 'current'
+          !isNaN(Number(project.location.lng))
       ),
     [mapProjects]
   );
 
-  const initialRegion = {
-    latitude: markers.length > 0 ? Number(markers[0]?.location?.lat) : INDIA_CENTER.latitude,
-    longitude: markers.length > 0 ? Number(markers[0]?.location?.lng) : INDIA_CENTER.longitude,
-    latitudeDelta: 14,
-    longitudeDelta: 14,
-  };
-
   const displayName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Worker';
+
+  const mapHtml = useMemo(() => {
+    const safeMarkers =
+      markers.length > 0
+        ? markers.map((project) => ({
+            id: project.id,
+            title: project.title ?? 'Project',
+            status: project.status ?? '',
+            lat: Number(project.location.lat),
+            lng: Number(project.location.lng),
+          }))
+        : [
+            {
+              id: 'default-center',
+              title: 'India center',
+              status: '',
+              lat: INDIA_CENTER.latitude,
+              lng: INDIA_CENTER.longitude,
+            },
+          ];
+
+    const markerJson = JSON.stringify(safeMarkers);
+    return `<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+      html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #f8fafc; }
+      .leaflet-control-attribution { font-size: 10px; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      const markers = ${markerJson};
+      const map = L.map('map', { zoomControl: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      const markerRefs = [];
+      markers.forEach((m) => {
+        const marker = L.marker([m.lat, m.lng]).addTo(map);
+        marker.bindPopup('<strong>' + (m.title || 'Project') + '</strong><br/>' + (m.status || '') + '<br/>' + m.lat.toFixed(5) + ', ' + m.lng.toFixed(5));
+        markerRefs.push(marker);
+      });
+
+      if (markerRefs.length > 1) {
+        const group = L.featureGroup(markerRefs);
+        map.fitBounds(group.getBounds().pad(0.2));
+      } else if (markerRefs.length === 1) {
+        map.setView(markerRefs[0].getLatLng(), 13);
+      } else {
+        map.setView([20.5937, 78.9629], 4);
+      }
+    </script>
+  </body>
+</html>`;
+  }, [markers]);
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
@@ -122,25 +176,32 @@ export default function DashboardTab() {
         </Text>
 
         <View className="mt-3 overflow-hidden rounded-xl border border-border">
-          <MapView style={{ height: 210, width: '100%' }} initialRegion={initialRegion}>
-            {markers.map((project) => (
-              <Marker
-                key={project.id}
-                coordinate={{
-                  latitude: Number(project.location.lat),
-                  longitude: Number(project.location.lng),
-                }}
-                description={project.status}
-                title={project.title}
-              />
-            ))}
-          </MapView>
+          <WebView
+            originWhitelist={['*']}
+            source={{ html: mapHtml }}
+            style={{ height: 210, width: '100%', backgroundColor: '#f8fafc' }}
+            javaScriptEnabled
+            domStorageEnabled
+            setSupportMultipleWindows={false}
+            nestedScrollEnabled
+          />
         </View>
+        <Text className="mt-2 text-[11px] text-muted-foreground">Map tiles: OpenStreetMap</Text>
 
         {markers.length === 0 && (
           <Text className="mt-2 text-xs text-muted-foreground">
             No project coordinates available yet. Map is centered to India by default.
           </Text>
+        )}
+
+        {markers.length > 0 && (
+          <View className="mt-2 gap-1">
+            {markers.slice(0, 4).map((project) => (
+              <Text key={`${project.id}-coords`} className="text-xs text-muted-foreground">
+                {project.title}: {Number(project.location.lat).toFixed(5)}, {Number(project.location.lng).toFixed(5)}
+              </Text>
+            ))}
+          </View>
         )}
       </View>
 
