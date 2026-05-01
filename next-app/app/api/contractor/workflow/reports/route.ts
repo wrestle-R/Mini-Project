@@ -9,7 +9,6 @@ import { downloadGridFSFileAsBuffer } from "@/lib/ifc/gridfs";
 import { serializeIfcSession } from "@/lib/ifc/serializers";
 import { getVersionCount } from "@/lib/ifc/sessions";
 import { assertWorkflowTransition, type WorkflowState } from "@/lib/workflow/states";
-import { buildWorkflowReport } from "@/lib/workflow/report-service";
 
 export async function GET(req: Request) {
   try {
@@ -153,13 +152,26 @@ export async function POST(req: Request) {
       .select("versionNumber");
     const versionNumber = (latestReport?.versionNumber || 0) + 1;
 
-    const reportPayload = buildWorkflowReport({
-      model,
-      validationSnapshotId: snapshot._id.toString(),
-      ifcSessionId: session._id.toString(),
-      ifcVersionNumber: session.currentVersionNumber,
-      fitResult: snapshot.fitResult,
+    const backendUrl = (process.env.PYTHON_BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+    const reportRes = await fetch(`${backendUrl}/api/workflow/report/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        validationSnapshotId: snapshot._id.toString(),
+        ifcSessionId: session._id.toString(),
+        ifcVersionNumber: session.currentVersionNumber,
+        fitResult: snapshot.fitResult,
+      }),
     });
+    const reportJson = await reportRes.json().catch(() => null);
+    if (!reportRes.ok) {
+      throw new Error(reportJson?.detail || reportJson?.error || "Report generation failed");
+    }
+    const reportPayload = reportJson?.report;
+    if (!reportPayload) {
+      throw new Error("Report generation returned an empty payload");
+    }
 
     await ProjectReport.updateMany(
       { sessionId: session._id, status: "current" },

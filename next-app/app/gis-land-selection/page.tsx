@@ -748,14 +748,15 @@ export default function GisLandSelectionPage() {
             <div className="flex items-center gap-2">
               <select
                 suppressHydrationWarning
-                className="flex-1 text-[11px] px-2 py-2 rounded-lg border border-white/12 bg-white/5 text-white/70 hover:bg-white/10 transition-colors disabled:opacity-40"
+                style={{ colorScheme: "dark" }}
+                className="flex-1 text-[11px] px-2 py-2 rounded-lg border border-white/12 bg-[#0a0d14] text-white/70 hover:bg-white/5 transition-colors disabled:opacity-40"
                 onChange={handleModelSelect}
                 disabled={!selectedPolygon || fetchingSessions || loadingModel}
                 value={selectedSession?.id || ""}
               >
-                <option value="">Select saved 3D model...</option>
+                <option value="" className="bg-[#0a0d14] text-white">Select saved 3D model...</option>
                 {sessions.map((s) => (
-                  <option key={s.id} value={s.id}>{s.title}</option>
+                  <option key={s.id} value={s.id} className="bg-[#0a0d14] text-white">{s.title}</option>
                 ))}
               </select>
               <button

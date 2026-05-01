@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useContractor } from "@/contexts/ContractorContext";
-import { ArrowLeft, Building2, CalendarDays, CheckCircle2, ClipboardList, Download, FileText, HardHat, Layers3, Ruler, ShieldAlert, Users } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowLeft, Building2, CalendarDays, CheckCircle2, ClipboardList, Download, FileText, HardHat, Layers3, Ruler, ShieldAlert, Sparkles, TimerReset, Users } from "lucide-react";
+import { ProjectTimeline, type ProjectTimelinePhase } from "@/components/gis/project-timeline";
+import { PhaseWorkforceGrid, type PhaseWorkforce } from "@/components/gis/phase-workforce-grid";
 
 type ReportPayload = {
   schemaVersion: number;
@@ -49,6 +52,19 @@ type ReportPayload = {
     unit: string;
     basis: string;
   }[];
+  materialsByPhase: {
+    phaseId: string;
+    phaseName: string;
+    materials: {
+      material: string;
+      elementType: string;
+      elementCount: number;
+      quantity: number;
+      quantityRange: { min: number; max: number };
+      unit: string;
+      basis: string;
+    }[];
+  }[];
   materialTotals: {
     totalElements: number;
     totalQuantity: number;
@@ -65,6 +81,7 @@ type ReportPayload = {
     };
     basis: string;
   };
+  projectTimeline: ProjectTimelinePhase[];
   recommendedWorkerMix: { role: string; count: number }[];
   workforceEstimate: {
     totalRecommendedWorkers: number;
@@ -72,6 +89,7 @@ type ReportPayload = {
     totalWorkerRange: { min: number; max: number };
     recommendedWorkerMix: { role: string; count: number }[];
   };
+  workforceByPhase: PhaseWorkforce[];
   dimensionSummary: {
     totalElements: number;
     totalVolume: number;
@@ -155,6 +173,93 @@ function SectionCard({
   );
 }
 
+function ReportLoadingState() {
+  const steps = [
+    { label: "Reading IFC model", accent: "from-cyan-300 to-sky-400" },
+    { label: "Building timeline", accent: "from-sky-300 to-emerald-300" },
+    { label: "Sizing workforce", accent: "from-emerald-300 to-lime-300" },
+    { label: "Rendering report", accent: "from-amber-300 to-orange-300" },
+  ];
+
+  return (
+    <div className="min-h-screen overflow-hidden bg-[#050811] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.18),_transparent_34%),radial-gradient(circle_at_80%_20%,_rgba(16,185,129,0.14),_transparent_30%),linear-gradient(180deg,_rgba(6,10,19,1),_rgba(3,6,12,1))]" />
+      <div className="relative mx-auto flex min-h-screen max-w-6xl items-center px-6 py-14">
+        <div className="grid w-full gap-8 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-200/80">
+              <Sparkles className="h-3.5 w-3.5" />
+              Generating project report
+            </div>
+            <div>
+              <h1 className="max-w-2xl text-4xl font-semibold leading-tight md:text-6xl">
+                The workflow is planning your project in phases.
+              </h1>
+              <p className="mt-4 max-w-xl text-base leading-7 text-white/60 md:text-lg">
+                Timeline, materials, and workforce are being assembled synchronously. The report will include animated phase planning and a phase-wise labor breakdown.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {steps.map((step, index) => (
+                <motion.div
+                  key={step.label}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: index * 0.12 }}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-white/90">{step.label}</p>
+                    <TimerReset className="h-4 w-4 text-cyan-300" />
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+                    <motion.div
+                      initial={{ x: "-35%" }}
+                      animate={{ x: ["-35%", "110%"] }}
+                      transition={{ duration: 1.8, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                      className={`h-full w-1/2 rounded-full bg-gradient-to-r ${step.accent}`}
+                    />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative rounded-[2rem] border border-white/10 bg-[#0a111e]/90 p-5 shadow-[0_16px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+            <div className="absolute inset-x-10 top-10 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
+            <div className="absolute inset-y-10 left-10 w-px bg-gradient-to-b from-transparent via-emerald-400/25 to-transparent" />
+            <div className="grid gap-3">
+              {steps.map((step, index) => (
+                <motion.div
+                  key={`${step.label}-lane`}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: index * 0.15 }}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-white/40">Stage {index + 1}</p>
+                      <p className="mt-1 text-base font-semibold text-white">{step.label}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-2xl border border-white/10 bg-white/5" />
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 text-xs text-white/45">
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Planning</span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Materials</span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Crew</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GisReportPage() {
   const router = useRouter();
   const params = useParams<{ sessionId: string }>();
@@ -228,18 +333,7 @@ export default function GisReportPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#060910] text-white">
-        <div className="mx-auto max-w-7xl px-6 py-10">
-          <div className="h-8 w-56 animate-pulse rounded bg-white/10" />
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <div key={idx} className="h-48 animate-pulse rounded-2xl bg-white/5" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <ReportLoadingState />;
   }
 
   if (error) {
@@ -369,6 +463,19 @@ export default function GisReportPage() {
             </p>
             <p className="mt-1 text-sm text-white/55">midline {totalWorkers}, peak {payload.workforceEstimate.peakCrewSize}</p>
           </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+          <SectionCard title="Project Timeline" icon={<Sparkles className="h-4 w-4" />}>
+            <ProjectTimeline phases={payload.projectTimeline || []} />
+            <p className="mt-4 text-sm text-white/55">
+              Each phase is sequenced from planning through handoff with duration estimates and deliverables.
+            </p>
+          </SectionCard>
+
+          <SectionCard title="Phase Workforce Plan" icon={<Users className="h-4 w-4" />}>
+            <PhaseWorkforceGrid phases={payload.workforceByPhase || []} />
+          </SectionCard>
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-2">

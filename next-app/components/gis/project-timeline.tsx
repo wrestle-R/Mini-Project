@@ -1,0 +1,99 @@
+"use client";
+
+import { motion } from "framer-motion";
+import { ChevronRight, Clock3, Sparkles } from "lucide-react";
+
+export type ProjectTimelinePhase = {
+  id: string;
+  name: string;
+  sequence: number;
+  durationDays: number;
+  durationPercent: number;
+  deliverables: string[];
+  tasks: string[];
+  dependencies: string[];
+};
+
+export function ProjectTimeline({ phases }: { phases: ProjectTimelinePhase[] }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-cyan-300">
+        <Clock3 className="h-4 w-4" />
+        <span className="text-xs uppercase tracking-[0.2em] text-white/45">Project timeline</span>
+      </div>
+
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0b111d] p-4 md:p-5">
+        <div className="absolute inset-x-8 top-12 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
+        <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+          {phases.map((phase, index) => (
+            <motion.article
+              key={phase.id}
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: index * 0.06 }}
+              className="relative rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.2)]"
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-cyan-200/90">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Phase {phase.sequence}
+                  </div>
+                  <h3 className="text-base font-semibold text-white">{phase.name}</h3>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+                  <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-white/40">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    Duration
+                  </div>
+                  <div className="text-lg font-semibold text-white">{phase.durationDays}d</div>
+                </div>
+              </div>
+
+              <div className="mb-3 h-2 overflow-hidden rounded-full bg-white/5">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, Math.max(8, phase.durationPercent))}%` }}
+                  transition={{ duration: 0.8, delay: 0.15 + index * 0.05 }}
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-emerald-300"
+                />
+              </div>
+
+              <p className="text-xs uppercase tracking-[0.16em] text-white/45">Deliverables</p>
+              <ul className="mt-2 space-y-1.5 text-sm text-white/75">
+                {phase.deliverables.slice(0, 4).map((item) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Key tasks</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {phase.tasks.slice(0, 4).map((task) => (
+                    <span key={task} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/70">
+                      {task}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-white/45">
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
+                  {phase.durationPercent.toFixed(1)}% of project
+                </span>
+                {phase.dependencies.length > 0 && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
+                    Depends on {phase.dependencies.join(", ")}
+                  </span>
+                )}
+              </div>
+            </motion.article>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -15,6 +15,9 @@ from urllib.parse import urlparse
 from urllib.request import Request as UrlRequest, urlopen
 from typing import Optional, List, Dict, Any
 from PIL import Image
+from dotenv import find_dotenv, load_dotenv
+
+load_dotenv(find_dotenv(), override=False)
 
 # IFC Processing Pipeline
 from backend.services.model_builder import build_internal_model
@@ -32,6 +35,7 @@ import sys
 
 # GIS / Spatial Intelligence router
 from backend.gis.router import router as gis_router
+from backend.workflow.router import router as workflow_router
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SMART_ATTENDANCE_DIR = os.path.join(BASE_DIR, "SmartAttendance")
@@ -131,6 +135,7 @@ app.add_middleware(
 
 # Register GIS / Spatial Intelligence router
 app.include_router(gis_router)
+app.include_router(workflow_router)
 
 # Ensure directories exist
 os.makedirs("models", exist_ok=True)
