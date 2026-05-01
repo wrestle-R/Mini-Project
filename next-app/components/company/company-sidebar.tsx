@@ -38,6 +38,9 @@ import {
   FiUserPlus,
   FiClipboard,
   FiCamera,
+  FiBox,
+  FiFileText,
+  FiMap,
   FiPackage,
 } from "react-icons/fi";
 import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
@@ -57,6 +60,9 @@ export function CompanySidebar() {
     { label: "Contractors", href: "/company/contractors", icon: FiUserPlus },
     { label: "Assignments", href: "/company/assignments", icon: FiClipboard },
     { label: "Materials", href: "/company/materials", icon: FiPackage },
+    { label: "Daily Reports", href: "/company/daily-reports", icon: FiFileText },
+    { label: "GIS", href: "/company/gis", icon: FiMap },
+    { label: "IFC Studio", href: "/company/ifc-viewer", icon: FiBox },
     { label: "Attendance Cam", href: "/company/attendance-cam", icon: FiCamera },
   ];
 
