@@ -20,3 +20,10 @@ node_modules/
 *.md
 *.ifc
 agents/
+
+# Keep Expo app config tracked for EAS remote builds.
+!expo/package.json
+!expo/package-lock.json
+!expo/app.json
+!expo/eas.json
+!expo/tsconfig.json
