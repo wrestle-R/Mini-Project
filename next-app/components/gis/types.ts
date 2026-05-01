@@ -132,6 +132,7 @@ export interface MapEvent {
 
 // ── GeoJSON globals (minimal if @types/geojson not installed) ─────────────
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace GeoJSON {
     interface Geometry {
       type: string;

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Send, MapPin, Layers, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import type { ChatMessage, ChatActionEvent, MapEvent } from "./types";
 
-const BACKEND = "http://localhost:8000";
+const BACKEND = process.env.NEXT_PUBLIC_PYTHON_API_BASE_URL || "http://localhost:8000";
 
 const SUGGESTED_PROMPTS = [
   "Take me to Mumbai",

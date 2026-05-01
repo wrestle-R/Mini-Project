@@ -43,7 +43,7 @@ interface RecognitionResponse {
   matches: MatchData[];
 }
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_PYTHON_API_BASE_URL || "http://localhost:8000";
 const SOURCE_ID = "web-cam";
 
 // ─── Component ───────────────────────────────────────────────────────
