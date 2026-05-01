@@ -38,6 +38,7 @@ import {
   FiUserPlus,
   FiClipboard,
   FiCamera,
+  FiPackage,
 } from "react-icons/fi";
 import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
@@ -55,6 +56,7 @@ export function CompanySidebar() {
     { label: "Projects", href: "/company/projects", icon: FiFolder },
     { label: "Contractors", href: "/company/contractors", icon: FiUserPlus },
     { label: "Assignments", href: "/company/assignments", icon: FiClipboard },
+    { label: "Materials", href: "/company/materials", icon: FiPackage },
     { label: "Attendance Cam", href: "/company/attendance-cam", icon: FiCamera },
   ];
 

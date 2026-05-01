@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useContractor } from "@/contexts/ContractorContext";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Card,
@@ -42,7 +42,6 @@ interface Assignment {
 
 export function ContractorProjects() {
   const { token } = useContractor();
-  const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -105,21 +104,14 @@ export function ContractorProjects() {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {assignments.map((a) => {
-            // Extract project ID from populated object or string
-            const projectId =
-              (a.project as unknown as { _id?: string })?._id ||
-              (typeof a.project === "string" ? a.project : null);
-
-            return (
-              <Card
-                key={a.id}
-                className="cursor-pointer transition-shadow hover:shadow-md group"
-                onClick={() => {
-                  if (projectId) {
-                    router.push(`/contractor/projects/${a.id}`);
-                  }
-                }}
+          {assignments.map((a) => (
+            <Card
+              key={a.id}
+              className="transition-shadow hover:shadow-md group"
+            >
+              <Link
+                href={`/contractor/projects/${a.id}`}
+                className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -177,9 +169,9 @@ export function ContractorProjects() {
                     </p>
                   )}
                 </CardContent>
-              </Card>
-            );
-          })}
+              </Link>
+            </Card>
+          ))}
         </div>
       )}
     </motion.div>

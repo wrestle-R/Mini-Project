@@ -106,7 +106,3 @@ export async function normalizeIfcInstructionWithGroq(params: {
   }
 }
 
-
-
-
-

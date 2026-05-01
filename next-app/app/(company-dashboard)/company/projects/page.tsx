@@ -200,6 +200,8 @@ export default function CompanyProjectsPage() {
                 <Label htmlFor="title">Title *</Label>
                 <Input
                   id="title"
+                  name="title"
+                  autoComplete="off"
                   value={form.title}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, title: e.target.value }))
@@ -212,6 +214,8 @@ export default function CompanyProjectsPage() {
                 <Label htmlFor="description">Description</Label>
                 <Input
                   id="description"
+                  name="description"
+                  autoComplete="off"
                   value={form.description}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, description: e.target.value }))
@@ -240,6 +244,8 @@ export default function CompanyProjectsPage() {
                   <Label htmlFor="latitude">Latitude</Label>
                   <Input
                     id="latitude"
+                    name="latitude"
+                    autoComplete="off"
                     inputMode="decimal"
                     value={form.location.lat ?? ""}
                     onChange={(e) => {
@@ -260,6 +266,8 @@ export default function CompanyProjectsPage() {
                   <Label htmlFor="longitude">Longitude</Label>
                   <Input
                     id="longitude"
+                    name="longitude"
+                    autoComplete="off"
                     inputMode="decimal"
                     value={form.location.lng ?? ""}
                     onChange={(e) => {
@@ -280,7 +288,9 @@ export default function CompanyProjectsPage() {
                   <Label htmlFor="budget">Budget</Label>
                   <Input
                     id="budget"
+                    name="budget"
                     type="number"
+                    autoComplete="off"
                     value={form.budget}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, budget: e.target.value }))

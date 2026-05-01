@@ -84,6 +84,7 @@ interface FitValidationResult {
   inside_geometry?: GeoJSON.Geometry | null;
   overflow_geometry?: GeoJSON.Geometry | null;
   has_building_collision?: boolean;
+  has_water_collision?: boolean;
   messages: string[];
 }
 

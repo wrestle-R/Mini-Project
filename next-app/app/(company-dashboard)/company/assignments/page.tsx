@@ -182,6 +182,7 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="projectId">Project *</Label>
                 <select
                   id="projectId"
+                  name="projectId"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.projectId}
                   onChange={(e) =>
@@ -200,6 +201,7 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="contractorId">Contractor *</Label>
                 <select
                   id="contractorId"
+                  name="contractorId"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.contractorId}
                   onChange={(e) =>
@@ -218,6 +220,7 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="customerId">Customer (optional)</Label>
                 <select
                   id="customerId"
+                  name="customerId"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.customerId}
                   onChange={(e) =>
