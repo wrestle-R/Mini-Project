@@ -5,7 +5,22 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useContractor } from "@/contexts/ContractorContext";
 import { motion } from "framer-motion";
-import { ArrowLeft, Building2, CalendarDays, CheckCircle2, ClipboardList, Download, FileText, HardHat, Layers3, Ruler, ShieldAlert, Sparkles, TimerReset, Users } from "lucide-react";
+import {
+  FiArrowLeft as ArrowLeft,
+  FiBriefcase as Building2,
+  FiCalendar as CalendarDays,
+  FiCheckCircle as CheckCircle2,
+  FiClipboard as ClipboardList,
+  FiDownload as Download,
+  FiFileText as FileText,
+  FiTool as HardHat,
+  FiLayers as Layers3,
+  FiMaximize as Ruler,
+  FiAlertTriangle as ShieldAlert,
+  FiActivity as Sparkles,
+  FiRefreshCw as TimerReset,
+  FiUsers as Users,
+} from "react-icons/fi";
 import { ProjectTimeline, type ProjectTimelinePhase } from "@/components/gis/project-timeline";
 import { PhaseWorkforceGrid, type PhaseWorkforce } from "@/components/gis/phase-workforce-grid";
 
@@ -214,12 +229,12 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#0f1420]/90 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-cyan-300">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-primary">
           {icon}
         </div>
-        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {title}
         </h2>
       </div>
@@ -237,8 +252,8 @@ function ReportLoadingState() {
   ];
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#050811] text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.18),_transparent_34%),radial-gradient(circle_at_80%_20%,_rgba(16,185,129,0.14),_transparent_30%),linear-gradient(180deg,_rgba(6,10,19,1),_rgba(3,6,12,1))]" />
+    <div className="min-h-screen overflow-hidden bg-background text-foreground">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.16),_transparent_34%),linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--background)))]" />
       <div className="relative mx-auto flex min-h-screen max-w-6xl items-center px-6 py-14">
         <div className="grid w-full gap-8 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
@@ -421,8 +436,8 @@ export default function GisReportPage() {
   const fitSummary = payload.fitSummary;
 
   return (
-    <div className="min-h-screen bg-[#060910] text-white">
-      <div className="border-b border-white/10 bg-[#090d15]/95 backdrop-blur-xl">
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="border-b border-border bg-card/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5">
           <div>
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-cyan-300/70">

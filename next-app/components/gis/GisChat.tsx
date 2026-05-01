@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Send, MapPin, Layers, Sparkles, Loader2, AlertCircle } from "lucide-react";
+import {
+  FiSend as Send,
+  FiMapPin as MapPin,
+  FiLayers as Layers,
+  FiMessageSquare as Sparkles,
+  FiLoader as Loader2,
+  FiAlertCircle as AlertCircle,
+} from "react-icons/fi";
 import type { ChatMessage, ChatActionEvent, MapEvent } from "./types";
 
 const BACKEND = process.env.NEXT_PUBLIC_PYTHON_API_BASE_URL || "http://localhost:8000";
@@ -16,7 +23,7 @@ const SUGGESTED_PROMPTS = [
 
 const ACTION_ICONS: Record<string, React.ReactNode> = {
   flyTo: <MapPin className="w-3.5 h-3.5 text-sky-400" />,
-  drawPolygon: <Layers className="w-3.5 h-3.5 text-violet-400" />,
+  drawPolygon: <Layers className="w-3.5 h-3.5 text-primary" />,
   suggestAreas: <Sparkles className="w-3.5 h-3.5 text-emerald-400" />,
   filterAreas: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
   none: null,
@@ -118,7 +125,7 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Something went wrong";
         setError(msg);
-        addMessage({ role: "agent", content: `⚠️ ${msg}` });
+        addMessage({ role: "agent", content: `Warning: ${msg}` });
       } finally {
         setLoading(false);
       }
@@ -127,16 +134,16 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
   );
 
   return (
-    <div className="flex flex-col h-full bg-[#0f1117] text-white">
+    <div className="flex h-full flex-col bg-card text-foreground">
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="flex-none px-4 py-3 border-b border-white/10 bg-white/5 backdrop-blur-sm">
+      <div className="flex-none border-b border-border bg-muted/30 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg">
+          <div className="w-8 h-8 rounded-lg bg-primary/20 text-primary flex items-center justify-center shadow-lg">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white leading-none">Spatial Agent</p>
-            <p className="text-[11px] text-white/40 mt-0.5">India Land Intelligence</p>
+            <p className="text-sm font-semibold leading-none text-foreground">Spatial Agent</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">India Land Intelligence</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
             <button
@@ -159,10 +166,10 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
 
         {/* Selected polygon info strip */}
         {selectedPolygonInfo && (
-          <div className="mt-2 p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex gap-3 text-[11px]">
-            <MapPin className="w-3.5 h-3.5 text-indigo-400 flex-none mt-0.5" />
+          <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded-lg flex gap-3 text-[11px]">
+            <MapPin className="w-3.5 h-3.5 text-primary flex-none mt-0.5" />
             <div>
-              <p className="text-indigo-300 font-medium">Selected Parcel</p>
+              <p className="text-primary font-medium">Selected Parcel</p>
               <p className="text-white/50 mt-0.5">
                 {(selectedPolygonInfo.areaSqm / 10000).toFixed(2)} ha ·{" "}
                 {selectedPolygonInfo.centroid[1].toFixed(4)}°N,{" "}
@@ -183,8 +190,8 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
             <div
               className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-indigo-600 text-white rounded-br-sm"
-                  : "bg-white/8 border border-white/10 text-white/90 rounded-bl-sm"
+                  ? "rounded-br-sm bg-primary text-primary-foreground"
+                  : "rounded-bl-sm border border-border bg-muted/30 text-foreground"
               }`}
             >
               {msg.role === "agent" && msg.actionEvent && msg.actionEvent.action_type !== "none" && (
@@ -210,7 +217,7 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
         {loading && (
           <div className="flex justify-start">
             <div className="bg-white/8 border border-white/10 rounded-xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-2">
-              <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
               <span className="text-sm text-white/50">Thinking…</span>
             </div>
           </div>
@@ -236,7 +243,7 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
                 onClick={() => sendMessage(p)}
                 disabled={loading}
                 className="flex-none text-[10px] px-2.5 py-1 rounded-lg border border-white/5 bg-white/5 text-white/40
-                           hover:bg-indigo-500/15 hover:border-indigo-500/30 hover:text-indigo-300
+                           hover:bg-primary/15 hover:border-primary/30 hover:text-primary
                            transition-all duration-150 disabled:opacity-40 whitespace-nowrap"
               >
                 {p}
@@ -255,7 +262,7 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
       )}
 
       {/* ── Input ──────────────────────────────────────────────────── */}
-      <div className="flex-none p-4 border-t border-white/10">
+      <div className="flex-none border-t border-border p-4">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -269,17 +276,17 @@ export default function GisChat({ onMapEvent, selectedPolygonInfo }: GisChatProp
             onChange={(e) => setInput(e.target.value)}
             placeholder="e.g. Show rural plots near Nagpur…"
             disabled={loading}
-            className="flex-1 bg-white/8 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white
-                       placeholder:text-white/25 focus:outline-none focus:border-indigo-500/60
-                       focus:bg-indigo-500/5 transition-all duration-150 disabled:opacity-50"
+            className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground
+                       placeholder:text-muted-foreground focus:outline-none focus:border-primary/60
+                       focus:bg-muted/20 transition-all duration-150 disabled:opacity-50"
           />
           <button
             id="gis-chat-send"
             type="submit"
             disabled={loading || !input.trim()}
             aria-label="Send message"
-            className="flex-none w-10 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40
-                       flex items-center justify-center transition-all duration-150 shadow-lg shadow-indigo-500/20
+            className="flex-none w-10 h-10 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40
+                       flex items-center justify-center transition-all duration-150 shadow-lg shadow-primary/20
                        disabled:cursor-not-allowed"
           >
             {loading ? (

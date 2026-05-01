@@ -1,7 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { HardHat, ShieldCheck, Users } from "lucide-react";
+import {
+  FiTool as HardHat,
+  FiShield as ShieldCheck,
+  FiUsers as Users,
+} from "react-icons/fi";
 
 export type PhaseWorker = {
   role: string;
@@ -28,7 +32,7 @@ function categoryTone(category: string) {
     case "engineering":
       return "border-cyan-500/20 bg-cyan-500/10 text-cyan-100";
     case "specialized":
-      return "border-violet-500/20 bg-violet-500/10 text-violet-100";
+      return "border-primary/20 bg-primary/10 text-foreground";
     case "management":
       return "border-emerald-500/20 bg-emerald-500/10 text-emerald-100";
     default:
@@ -39,9 +43,9 @@ function categoryTone(category: string) {
 export function PhaseWorkforceGrid({ phases }: { phases: PhaseWorkforce[] }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-amber-300">
+      <div className="flex items-center gap-2 text-primary">
         <Users className="h-4 w-4" />
-        <span className="text-xs uppercase tracking-[0.2em] text-white/45">Workforce by phase</span>
+        <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Workforce by phase</span>
       </div>
 
       <div className="grid gap-4">
@@ -51,7 +55,7 @@ export function PhaseWorkforceGrid({ phases }: { phases: PhaseWorkforce[] }) {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: index * 0.06 }}
-            className="rounded-3xl border border-white/10 bg-[#0b111d] p-4 md:p-5"
+            className="rounded-3xl border border-border bg-card p-4 md:p-5"
           >
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>

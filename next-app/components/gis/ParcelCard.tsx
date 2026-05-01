@@ -1,4 +1,12 @@
-import { MapPin, Route, Layers, TrendingUp, Lock, CheckCircle2, Navigation } from "lucide-react";
+import {
+  FiMapPin as MapPin,
+  FiCornerUpRight as Route,
+  FiLayers as Layers,
+  FiTrendingUp as TrendingUp,
+  FiLock as Lock,
+  FiCheckCircle as CheckCircle2,
+  FiNavigation as Navigation,
+} from "react-icons/fi";
 import type { SuggestionItem } from "./types";
 
 const CONFIDENCE_STYLES: Record<
@@ -47,16 +55,16 @@ export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: Pa
   return (
     <div
       className={`
-        group relative bg-white/5 border ${styles.border} rounded-xl p-3.5
-        hover:bg-white/8 hover:shadow-lg ${styles.glow} transition-all duration-200
-        ${isLocked ? "ring-1 ring-indigo-500/50" : ""}
+        group relative rounded-xl border bg-card p-3.5
+        hover:bg-muted/40 hover:shadow-md ${styles.glow} transition-all duration-200
+        ${isLocked ? "ring-1 ring-primary/50" : ""}
       `}
     >
       {/* ── Header row ───────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-2 mb-2.5">
         <div className="flex items-center gap-2">
           {/* Rank badge */}
-          <div className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center text-[11px] font-bold text-white/60">
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted text-[11px] font-bold text-muted-foreground">
             #{rank}
           </div>
           {/* Score badge */}
@@ -72,7 +80,7 @@ export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: Pa
           <button
             onClick={() => onFlyTo?.(item)}
             title="Fly to location"
-            className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60 transition-all duration-150"
+            className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground hover:bg-muted transition-all duration-150"
           >
             <Navigation className="w-3.5 h-3.5" />
           </button>
@@ -83,8 +91,8 @@ export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: Pa
               w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 flex-none
               ${
                 isLocked
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
-                  : "bg-white/5 text-white/30 hover:bg-indigo-500/20 hover:text-indigo-400"
+                  ? "bg-primary text-white shadow-md shadow-primary/30"
+                  : "bg-muted/50 text-muted-foreground hover:bg-primary/15 hover:text-primary"
               }
             `}
           >
@@ -98,7 +106,7 @@ export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: Pa
       </div>
 
       {/* ── Score bar ─────────────────────────────────────────────── */}
-      <div className="h-1 bg-white/8 rounded-full overflow-hidden mb-3">
+      <div className="mb-3 h-1 overflow-hidden rounded-full bg-muted">
         <div
           className={`h-full ${styles.bar} rounded-full transition-all duration-700`}
           style={{ width: `${scorePercent}%` }}
@@ -106,7 +114,7 @@ export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: Pa
       </div>
 
       {/* ── Stats row ─────────────────────────────────────────────── */}
-      <div className="flex gap-3 text-[10px] text-white/40 mb-2.5">
+      <div className="mb-2.5 flex gap-3 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <Layers className="w-3 h-3" /> {areaHa} ha
         </span>
@@ -124,8 +132,8 @@ export default function ParcelCard({ item, rank, isLocked, onLock, onFlyTo }: Pa
       {/* ── Reasons ───────────────────────────────────────────────── */}
       <ul className="space-y-1">
         {(item.reasons || []).slice(0, 2).map((reason, i) => (
-          <li key={i} className="flex items-start gap-1.5 text-[11px] text-white/55 leading-snug">
-            <TrendingUp className="w-3 h-3 text-white/20 flex-none mt-0.5" />
+          <li key={i} className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+            <TrendingUp className="mt-0.5 h-3 w-3 flex-none text-muted-foreground/70" />
             {reason}
           </li>
         ))}

@@ -1,7 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ChevronRight, Clock3, Sparkles } from "lucide-react";
+import {
+  FiChevronRight as ChevronRight,
+  FiClock as Clock3,
+  FiActivity as Sparkles,
+} from "react-icons/fi";
 
 export type ProjectTimelinePhase = {
   id: string;
@@ -17,9 +21,9 @@ export type ProjectTimelinePhase = {
 export function ProjectTimeline({ phases }: { phases: ProjectTimelinePhase[] }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-cyan-300">
+      <div className="flex items-center gap-2 text-primary">
         <Clock3 className="h-4 w-4" />
-        <span className="text-xs uppercase tracking-[0.2em] text-white/45">Project timeline</span>
+        <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Project timeline</span>
       </div>
 
       <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#07101a] to-[#071520] p-4 md:p-5">
@@ -35,7 +39,7 @@ export function ProjectTimeline({ phases }: { phases: ProjectTimelinePhase[] }) 
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-cyan-200/90">
+                  <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-primary">
                     <Sparkles className="h-3.5 w-3.5" />
                     Phase {phase.sequence}
                   </div>
