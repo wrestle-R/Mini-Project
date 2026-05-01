@@ -10,6 +10,7 @@ import ProjectApplication from "@/lib/models/ProjectApplication";
 import ProjectContractorAssignment from "@/lib/models/ProjectContractorAssignment";
 import Worker from "@/lib/models/Worker";
 import "@/lib/models/Company";
+import "@/lib/models/Contractor";
 
 type Actor =
   | { role: "worker"; uid: string; email: string }

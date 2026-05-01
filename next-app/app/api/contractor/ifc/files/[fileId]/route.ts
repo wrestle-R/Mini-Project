@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
+import Contractor from "@/lib/models/Contractor";
 import IfcSession from "@/lib/models/IfcSession";
 import IfcVersion from "@/lib/models/IfcVersion";
-import { getContractorIdFromAuthHeader } from "@/lib/ifc/auth";
+import { getIfcActorFromAuthHeader } from "@/lib/ifc/auth";
 import { downloadGridFSFileAsBuffer, getGridFSFileInfo } from "@/lib/ifc/gridfs";
+
+type SessionAccess = {
+  _id: mongoose.Types.ObjectId;
+  contractorId: mongoose.Types.ObjectId;
+};
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
-    const contractorId = getContractorIdFromAuthHeader(
-      req.headers.get("authorization")
-    );
-    if (!contractorId) {
+    const actor = getIfcActorFromAuthHeader(req.headers.get("authorization"));
+    if (!actor) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -25,18 +29,17 @@ export async function GET(
 
     await dbConnect();
 
-    const ownerSession = await IfcSession.findOne({
-      contractorId: new mongoose.Types.ObjectId(contractorId),
+    let session = await IfcSession.findOne({
       $or: [
         { currentGlbFileId: fileId },
         { currentJsonFileId: fileId },
         { currentMetadataFileId: fileId },
       ],
-    }).select("_id");
+    })
+      .select("_id contractorId")
+      .lean<SessionAccess | null>();
 
-    let hasAccess = Boolean(ownerSession);
-
-    if (!hasAccess) {
+    if (!session) {
       const version = await IfcVersion.findOne({
         $or: [
           { glbFileId: fileId },
@@ -46,12 +49,22 @@ export async function GET(
       }).select("sessionId");
 
       if (version) {
-        const versionOwner = await IfcSession.findOne({
-          _id: version.sessionId,
-          contractorId: new mongoose.Types.ObjectId(contractorId),
-        }).select("_id");
-        hasAccess = Boolean(versionOwner);
+        session = await IfcSession.findById(version.sessionId)
+          .select("_id contractorId")
+          .lean<SessionAccess | null>();
       }
+    }
+
+    let hasAccess = false;
+    if (session && actor.role === "contractor") {
+      hasAccess = session.contractorId.toString() === actor.id;
+    }
+    if (session && actor.role === "company") {
+      const contractor = await Contractor.findOne({
+        _id: session.contractorId,
+        companyId: actor.id,
+      }).select("_id");
+      hasAccess = Boolean(contractor);
     }
 
     if (!hasAccess) {
