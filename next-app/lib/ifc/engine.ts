@@ -28,6 +28,8 @@ interface SelectedContext {
   element_type?: string;
 }
 
+type DebugLog = Array<{ expressID: number; typeName: string; reason: string }>;
+
 interface IfcMeshGeometryRecord {
   type: "mesh";
   positions: number[];
@@ -54,6 +56,7 @@ export interface IfcModelRecord {
   project_id: string;
   created_at: string;
   elements: IfcElementRecord[];
+  debugLog?: DebugLog;
 }
 
 type IfcApiSingleton = {
@@ -65,22 +68,22 @@ declare global {
   var ifcApiSingleton: IfcApiSingleton | undefined;
 }
 
-const ifcApiSingleton = global.ifcApiSingleton ?? {};
+const ifcApiSingletonGlobal = global.ifcApiSingleton ?? {};
 if (!global.ifcApiSingleton) {
-  global.ifcApiSingleton = ifcApiSingleton;
+  global.ifcApiSingleton = ifcApiSingletonGlobal;
 }
 
 async function getIfcApi() {
-  if (ifcApiSingleton.api) return ifcApiSingleton.api;
-  if (!ifcApiSingleton.promise) {
-    ifcApiSingleton.promise = (async () => {
+  if (ifcApiSingletonGlobal.api) return ifcApiSingletonGlobal.api;
+  if (!ifcApiSingletonGlobal.promise) {
+    ifcApiSingletonGlobal.promise = (async () => {
       const api = new IfcAPI();
       await api.Init(() => IFC_WASM_PATH, true);
-      ifcApiSingleton.api = api;
+      ifcApiSingletonGlobal.api = api;
       return api;
     })();
   }
-  return ifcApiSingleton.promise;
+  return ifcApiSingletonGlobal.promise;
 }
 
 function typeColor(type: string): Rgba {
@@ -92,24 +95,52 @@ function typeColor(type: string): Rgba {
   if (upper.includes("COLUMN")) return [0.81, 0.82, 0.84, 1.0];
   if (upper.includes("BEAM")) return [0.76, 0.65, 0.52, 1.0];
   if (upper.includes("ROOF")) return [0.67, 0.31, 0.25, 1.0];
+  if (upper.includes("STAIR")) return [0.55, 0.35, 0.65, 1.0];
+  if (upper.includes("RAILING")) return [0.70, 0.60, 0.50, 1.0];
+  if (upper.includes("PLATE")) return [0.60, 0.65, 0.70, 1.0];
+  if (upper.includes("MEMBER")) return [0.65, 0.60, 0.55, 1.0];
+  if (upper.includes("FOUNDATION")) return [0.50, 0.45, 0.40, 1.0];
+  if (upper.includes("SHAFT")) return [0.45, 0.50, 0.55, 1.0];
+  if (upper.includes("CURTAINWALL")) return [0.50, 0.60, 0.75, 1.0];
   return [0.68, 0.74, 0.81, 1.0];
 }
 
-function shouldKeepIfcType(typeName: string) {
+const ELEMENT_TYPE_PATTERNS: Map<string, RegExp> = new Map([
+  ["WALL", /WALL/i],
+  ["SLAB", /SLAB/i],
+  ["DOOR", /DOOR/i],
+  ["WINDOW", /WINDOW/i],
+  ["COLUMN", /COLUMN/i],
+  ["BEAM", /BEAM/i],
+  ["ROOF", /ROOF/i],
+  ["STAIR", /STAIR/i],
+  ["SPACE", /SPACE/i],
+  ["MEMBER", /MEMBER/i],
+  ["PLATE", /PLATE/i],
+  ["RAILING", /RAILING/i],
+  ["CURTAINWALL", /CURTAINWALL/i],
+  ["SHAFT", /SHAFT/i],
+  ["FOUNDATION", /FOUNDATION/i],
+  ["CHILDELEMENT", /CHILDELEMENT/i],
+  ["BUILDINGELEMENTPROXY", /BUILDINGELEMENTPROXY/i],
+  ["ASSEMBLY", /ASSEMBLY/i],
+  ["GROVE", /GROVE/i],
+  ["ELEMENT", /ELEMENT/i],
+  ["PROXY", /PROXY/i],
+  ["FURNITURE", /FURNITURE/i],
+  ["SIGN", /SIGN/i],
+  ["AIRTERMINAL", /AIRTERMINAL/i],
+  ["LIGHTFIXTURE", /LIGHTFIXTURE/i],
+  ["UNITARY", /UNITARY/i],
+]);
+
+function shouldKeepIfcType(typeName: string): boolean {
   const upper = typeName.toUpperCase();
-  return (
-    upper.includes("WALL") ||
-    upper.includes("SLAB") ||
-    upper.includes("DOOR") ||
-    upper.includes("WINDOW") ||
-    upper.includes("COLUMN") ||
-    upper.includes("BEAM") ||
-    upper.includes("ROOF") ||
-    upper.includes("STAIR") ||
-    upper.includes("SPACE") ||
-    upper.includes("MEMBER") ||
-    upper.includes("BUILDINGELEMENTPROXY")
-  );
+  let matched = false;
+  ELEMENT_TYPE_PATTERNS.forEach((pattern) => {
+    if (pattern.test(upper)) matched = true;
+  });
+  return matched;
 }
 
 function createAccessor(
@@ -149,6 +180,77 @@ function updateDimensionsFromGeometry(element: IfcElementRecord) {
   element.properties.Dimensions = dims;
 }
 
+function extractTransformFromElement(
+  api: IfcAPI,
+  modelID: number,
+  line: Record<string, unknown>
+): IfcTransformRecord {
+  const defaultTransform: IfcTransformRecord = {
+    translation: [0, 0, 0],
+    rotation: [0, 0, 0, 1],
+    scale: [1, 1, 1],
+  };
+
+  interface IfcRecord { value: number; [key: string]: unknown }
+
+  try {
+    const placement = line?.ObjectPlacement as IfcRecord | undefined;
+    if (!placement || typeof placement !== "object") {
+      return defaultTransform;
+    }
+
+    const placementData = api.GetLine(modelID, placement.value, false);
+    if (!placementData) return defaultTransform;
+
+    const relPlacement = placementData?.RelativePlacement as IfcRecord | undefined;
+    if (!relPlacement || typeof relPlacement !== "object") {
+      return defaultTransform;
+    }
+
+    const locationData = api.GetLine(modelID, relPlacement.value, false);
+    if (!locationData) return defaultTransform;
+
+    const location = locationData?.Location as IfcRecord | undefined;
+    const refDirection = locationData?.RefDirection as IfcRecord | undefined;
+
+    let translation: [number, number, number] = [0, 0, 0];
+    if (location && typeof location === "object") {
+      const coords = api.GetLine(modelID, location.value, false);
+      if (coords) {
+        const x = (coords as { X?: number }).X ?? 0;
+        const y = (coords as { Y?: number }).Y ?? 0;
+        const z = (coords as { Z?: number }).Z ?? 0;
+        translation = [x, y, z];
+      }
+    }
+
+    let rotation: [number, number, number, number] = [0, 0, 0, 1];
+    if (refDirection && typeof refDirection === "object") {
+      const dirData = api.GetLine(modelID, refDirection.value, false);
+      if (dirData) {
+        const dr = (dirData as { DirectionRatios?: [number, number, number] }).DirectionRatios;
+        if (dr && dr.length >= 4) {
+          const q = new Quaternion();
+          const dirVec = new Vector3(dr[0], dr[1], dr[2]);
+          const upVec = new Vector3(0, 0, 1);
+          if (dirVec.length() > 0.0001) {
+            q.setFromUnitVectors(upVec, dirVec.normalize());
+            rotation = [q.x, q.y, q.z, q.w];
+          }
+        }
+      }
+    }
+
+    return {
+      translation,
+      rotation,
+      scale: [1, 1, 1],
+    };
+  } catch {
+    return defaultTransform;
+  }
+}
+
 function mergePlacedGeometry(
   api: IfcAPI,
   modelID: number,
@@ -159,13 +261,11 @@ function mergePlacedGeometry(
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];
-  let resolvedColor: Rgba | null = null;
+  const allColors: Rgba[] = [];
 
   for (let geomIndex = 0; geomIndex < flatMesh.geometries.size(); geomIndex += 1) {
     const placed = flatMesh.geometries.get(geomIndex);
-    if (!resolvedColor) {
-      resolvedColor = [placed.color.x, placed.color.y, placed.color.z, placed.color.w];
-    }
+    allColors.push([placed.color.x, placed.color.y, placed.color.z, placed.color.w]);
 
     const geometry = api.GetGeometry(modelID, placed.geometryExpressID);
     const rawVertexData = api.GetVertexArray(
@@ -206,6 +306,8 @@ function mergePlacedGeometry(
     geometry.delete();
   }
 
+  const resolvedColor = allColors.length > 0 ? allColors[0] : null;
+
   return {
     geometry: {
       type: "mesh" as const,
@@ -214,6 +316,7 @@ function mergePlacedGeometry(
       indices,
     },
     color: resolvedColor,
+    allColors,
   };
 }
 
@@ -268,6 +371,8 @@ export async function createModelFromIfcBuffer(
     COORDINATE_TO_ORIGIN: true,
   });
 
+  const debugLog: DebugLog = [];
+
   try {
     const meshes = api.LoadAllGeometry(modelID);
     const elements: IfcElementRecord[] = [];
@@ -279,6 +384,11 @@ export async function createModelFromIfcBuffer(
       const typeName = api.GetNameFromTypeCode(typeCode);
 
       if (!shouldKeepIfcType(typeName)) {
+        debugLog.push({
+          expressID,
+          typeName,
+          reason: "Element type not in keep list",
+        });
         continue;
       }
 
@@ -286,6 +396,11 @@ export async function createModelFromIfcBuffer(
       const extracted = mergePlacedGeometry(api, modelID, flatMesh);
 
       if (extracted.geometry.positions.length === 0 || extracted.geometry.indices.length === 0) {
+        debugLog.push({
+          expressID,
+          typeName,
+          reason: "Empty geometry after merge",
+        });
         continue;
       }
 
@@ -300,11 +415,7 @@ export async function createModelFromIfcBuffer(
             ? line.Name
             : `${typeName}_${expressID}`,
         geometry: extracted.geometry,
-        transform: {
-          translation: [0, 0, 0],
-          rotation: [0, 0, 0, 1],
-          scale: [1, 1, 1],
-        },
+        transform: extractTransformFromElement(api, modelID, line as Record<string, unknown>),
         properties: {
           Identity: {
             SourceFile: sourceFileName,
@@ -333,6 +444,7 @@ export async function createModelFromIfcBuffer(
       project_id: `project_${nanoid(10)}`,
       created_at: new Date().toISOString(),
       elements,
+      debugLog,
     };
   } finally {
     api.CloseModel(modelID);

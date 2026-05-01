@@ -28,6 +28,41 @@ type ReportPayload = {
       has_road_access: boolean;
       warning?: string | null;
     } | null;
+    environmentalSummary?: {
+      suitability_score: number;
+      sensitivity_level: string;
+      flood_risk_level: string;
+      biodiversity_level: string;
+      constraints: string[];
+      opportunities: string[];
+      nearby_features: string[];
+      metrics: {
+        nearest_water_distance_m: number | null;
+        nearest_forest_distance_m: number | null;
+        nearest_wetland_distance_m: number | null;
+        natural_cover_ratio: number;
+        water_overlap_area_sqm: number;
+        protected_overlap_area_sqm: number;
+        hazardous_landuse_count: number;
+      };
+    } | null;
+    infrastructureSummary?: {
+      readiness_score: number;
+      readiness_level: string;
+      utility_coverage_level: string;
+      transit_access_level: string;
+      available_utilities: string[];
+      missing_utilities: string[];
+      logistics_notes: string[];
+      metrics: {
+        nearest_power_distance_m: number | null;
+        nearest_water_infra_distance_m: number | null;
+        nearest_sewer_distance_m: number | null;
+        nearest_telecom_distance_m: number | null;
+        nearest_transit_distance_m: number | null;
+        nearest_rail_distance_m: number | null;
+      };
+    } | null;
   };
   elementCounts: Record<string, number>;
   detailedTakeoff: {
@@ -144,9 +179,29 @@ type ReportResponse = {
   } | null;
 };
 
+
+type ReportTab = "overview" | "timeline" | "materials" | "workforce" | "financial";
+
+const REPORT_TABS: { id: ReportTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "overview", label: "Overview", icon: FileText },
+  { id: "timeline", label: "Timeline", icon: CalendarDays },
+  { id: "materials", label: "Materials", icon: Layers3 },
+  { id: "workforce", label: "Workforce", icon: Users },
+  { id: "financial", label: "Financials", icon: Building2 },
+];
+
 function formatNumber(value: number | null | undefined, fractionDigits = 2) {
   if (typeof value !== "number" || Number.isNaN(value)) return "—";
-  return value.toLocaleString(undefined, { maximumFractionDigits: fractionDigits });
+  return value.toLocaleString("en-IN", { maximumFractionDigits: fractionDigits });
+}
+
+function formatCurrencyINR(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function SectionCard({
@@ -267,6 +322,7 @@ export default function GisReportPage() {
   const [data, setData] = useState<ReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ReportTab>("overview");
 
   useEffect(() => {
     if (!token || !params?.sessionId) return;
@@ -320,7 +376,7 @@ export default function GisReportPage() {
         lat: typeof centroid[1] === "number" ? centroid[1] : null,
         lng: typeof centroid[0] === "number" ? centroid[0] : null,
       },
-      budget: data.report.payload.costEstimate ? `$${formatNumber(data.report.payload.costEstimate.totalBudget, 0)}` : "",
+      budget: data.report.payload.costEstimate ? formatCurrencyINR(data.report.payload.costEstimate.totalBudget) : "",
       source: {
         sessionId: data.session.id,
         reportId: data.report.id,
@@ -419,333 +475,518 @@ export default function GisReportPage() {
               <Download className="h-4 w-4" />
               JSON
             </button>
+            <button
+              onClick={async () => {
+                const res = await fetch(`/api/contractor/workflow/reports?sessionId=${data.session.id}&format=bundle`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) {
+                  throw new Error("Unable to export stakeholder bundle");
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `gis-report-bundle-${data.session.id}.zip`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/15"
+            >
+              <Download className="h-4 w-4" />
+              Stakeholder Bundle
+            </button>
           </div>
         </div>
       </div>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
+          <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5 shadow-[0_16px_48px_rgba(16,185,129,0.08)]">
             <div className="flex items-center gap-2 text-emerald-300">
               <CheckCircle2 className="h-4 w-4" />
               Fit status
             </div>
-            <p className="mt-3 text-2xl font-semibold capitalize">{fitSummary.fitStatus || "unknown"}</p>
+            <p className="mt-3 text-2xl font-semibold capitalize text-white">{fitSummary.fitStatus || "unknown"}</p>
             <p className="mt-1 text-sm text-white/55">Fit score {formatNumber(fitSummary.fitScore, 1)}%</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-5 shadow-[0_16px_48px_rgba(34,211,238,0.08)]">
             <div className="flex items-center gap-2 text-cyan-300">
               <Layers3 className="h-4 w-4" />
               Materials
             </div>
-            <p className="mt-3 text-2xl font-semibold">{payload.materialTotals.totalElements}</p>
+            <p className="mt-3 text-2xl font-semibold text-white">{payload.materialTotals.totalElements}</p>
             <p className="mt-1 text-sm text-white/55">
               qty range {formatNumber(payload.materialTotals.totalQuantityRange.min)} - {formatNumber(payload.materialTotals.totalQuantityRange.max)}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="rounded-3xl border border-violet-500/20 bg-violet-500/10 p-5 shadow-[0_16px_48px_rgba(139,92,246,0.08)]">
             <div className="flex items-center gap-2 text-violet-300">
               <CalendarDays className="h-4 w-4" />
               Estimated days
             </div>
-            <p className="mt-3 text-2xl font-semibold">
+            <p className="mt-3 text-2xl font-semibold text-white">
               {payload.timeEstimate.durationRangeDays.min} - {payload.timeEstimate.durationRangeDays.max}
             </p>
             <p className="mt-1 text-sm text-white/55">midline {payload.timeEstimate.estimatedDurationDays} days</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 shadow-[0_16px_48px_rgba(245,158,11,0.08)]">
             <div className="flex items-center gap-2 text-amber-300">
               <Users className="h-4 w-4" />
               Recommended crew
             </div>
-            <p className="mt-3 text-2xl font-semibold">
+            <p className="mt-3 text-2xl font-semibold text-white">
               {payload.workforceEstimate.totalWorkerRange.min} - {payload.workforceEstimate.totalWorkerRange.max}
             </p>
             <p className="mt-1 text-sm text-white/55">midline {totalWorkers}, peak {payload.workforceEstimate.peakCrewSize}</p>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-2">
-          <SectionCard title="Project Timeline" icon={<Sparkles className="h-4 w-4" />}>
-            <ProjectTimeline phases={payload.projectTimeline || []} />
-            <p className="mt-4 text-sm text-white/55">
-              Each phase is sequenced from planning through handoff with duration estimates and deliverables.
-            </p>
-          </SectionCard>
+        {(fitSummary.environmentalSummary || fitSummary.infrastructureSummary) && (
+          <div className="mt-6 grid gap-6 xl:grid-cols-2">
+            {fitSummary.environmentalSummary && (
+              <SectionCard title="Environmental Intelligence" icon={<ShieldAlert className="h-4 w-4" />}>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Suitability</p>
+                    <p className="mt-2 text-2xl font-semibold">{formatNumber(fitSummary.environmentalSummary.suitability_score, 1)}/100</p>
+                    <p className="mt-1 text-sm text-white/60 capitalize">
+                      sensitivity {fitSummary.environmentalSummary.sensitivity_level} · flood {fitSummary.environmentalSummary.flood_risk_level}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Mapped context</p>
+                    <p className="mt-2 text-sm text-white/75">
+                      {fitSummary.environmentalSummary.nearby_features.join(", ") || "No dominant ecological feature detected"}
+                    </p>
+                    <p className="mt-2 text-sm text-white/55">
+                      Natural cover ratio {formatNumber(fitSummary.environmentalSummary.metrics.natural_cover_ratio * 100, 1)}%
+                    </p>
+                  </div>
+                </div>
+                {!!fitSummary.environmentalSummary.constraints.length && (
+                  <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-amber-200/70">Key constraints</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-50/85">
+                      {fitSummary.environmentalSummary.constraints.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </SectionCard>
+            )}
 
-          <SectionCard title="Phase Workforce Plan" icon={<Users className="h-4 w-4" />}>
-            <PhaseWorkforceGrid phases={payload.workforceByPhase || []} />
-          </SectionCard>
+            {fitSummary.infrastructureSummary && (
+              <SectionCard title="Infrastructure Readiness" icon={<Layers3 className="h-4 w-4" />}>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Readiness</p>
+                    <p className="mt-2 text-2xl font-semibold">{formatNumber(fitSummary.infrastructureSummary.readiness_score, 1)}/100</p>
+                    <p className="mt-1 text-sm text-white/60 capitalize">
+                      utilities {fitSummary.infrastructureSummary.utility_coverage_level} · transit {fitSummary.infrastructureSummary.transit_access_level}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Available utilities</p>
+                    <p className="mt-2 text-sm text-white/75">
+                      {fitSummary.infrastructureSummary.available_utilities.join(", ") || "No mapped utility corridor nearby"}
+                    </p>
+                    <p className="mt-2 text-sm text-white/55">
+                      Missing: {fitSummary.infrastructureSummary.missing_utilities.join(", ") || "None"}
+                    </p>
+                  </div>
+                </div>
+                {!!fitSummary.infrastructureSummary.logistics_notes.length && (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Logistics notes</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-white/70">
+                      {fitSummary.infrastructureSummary.logistics_notes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </SectionCard>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-3 shadow-[0_16px_60px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+          <div className="flex flex-wrap gap-2">
+            {REPORT_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ${isActive ? "border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-[0_10px_24px_rgba(34,211,238,0.12)]" : "border-white/10 bg-white/[0.04] text-white/65 hover:border-white/20 hover:bg-white/[0.07] hover:text-white"}`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-2">
-          <SectionCard title="Takeoff Summary" icon={<ClipboardList className="h-4 w-4" />}>
-            <div className="space-y-4 text-sm text-white/75">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {Object.entries(payload.elementCounts).map(([type, count]) => (
-                  <div key={type} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">{type}</p>
-                    <p className="mt-1 text-lg font-semibold">{count}</p>
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: "easeOut" }}
+          className="mt-6"
+        >
+          {activeTab === "overview" && (
+            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+              <SectionCard title="Project Snapshot" icon={<Sparkles className="h-4 w-4" />}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Fit status</p>
+                    <p className="mt-2 text-2xl font-semibold capitalize text-white">{fitSummary.fitStatus || "unknown"}</p>
+                    <p className="mt-1 text-sm text-white/55">Fit score {formatNumber(fitSummary.fitScore, 1)}%</p>
                   </div>
-                ))}
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-white/40">Detailed structural counts</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  {payload.detailedTakeoff.structural.map((item) => (
-                    <div key={item.type} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
-                      <span>{item.type}</span>
-                      <span className="text-white/90">{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Budget</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">
+                      {payload.costEstimate ? formatCurrencyINR(payload.costEstimate.totalBudget) : "—"}
+                    </p>
+                    <p className="mt-1 text-sm text-white/55">Estimated total cost in INR</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Duration</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.estimatedDurationDays} days</p>
+                    <p className="mt-1 text-sm text-white/55">
+                      Range {payload.timeEstimate.durationRangeDays.min} - {payload.timeEstimate.durationRangeDays.max} days
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Crew</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{payload.workforceEstimate.totalRecommendedWorkers}</p>
+                    <p className="mt-1 text-sm text-white/55">
+                      Peak {payload.workforceEstimate.peakCrewSize} · range {payload.workforceEstimate.totalWorkerRange.min} - {payload.workforceEstimate.totalWorkerRange.max}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-white/40">Report summary</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Session</p>
+                      <p className="mt-1 text-sm text-white/80">{data.session.id}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Workflow</p>
+                      <p className="mt-1 text-sm text-white/80">{data.session.workflowState}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Version</p>
+                      <p className="mt-1 text-sm text-white/80">{data.report.versionNumber}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Material lines</p>
+                      <p className="mt-1 text-sm text-white/80">{payload.detailedTakeoff.totalMaterialLines}</p>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Model Basis" icon={<Building2 className="h-4 w-4" />}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Aggregate geometry</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/75">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Elements</p>
+                        <p className="mt-1 font-semibold text-white">{payload.dimensionSummary.totalElements}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Volume</p>
+                        <p className="mt-1 font-semibold text-white">{formatNumber(payload.dimensionSummary.totalVolume)} cum</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Footprint</p>
+                        <p className="mt-1 font-semibold text-white">{formatNumber(payload.dimensionSummary.totalFootprintArea)} sqm</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Surface</p>
+                        <p className="mt-1 font-semibold text-white">{formatNumber(payload.dimensionSummary.totalSurfaceArea)} sqm</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Fit context</p>
+                    <p className="mt-3 text-sm leading-6 text-white/70">
+                      This report uses geometry-derived dimensions, then validates them against the IFC type labels. Timeline, workforce, and cost are then scaled from the actual footprint and material mix rather than a flat rule of thumb.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {Object.entries(payload.elementCounts).map(([type, count]) => (
+                    <div key={type} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70">
+                      <span className="uppercase tracking-[0.14em] text-white/40">{type}</span>
+                      <span className="ml-2 font-semibold text-white">{count}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/40">Openings</p>
-                  <div className="mt-3 space-y-2">
-                    {payload.detailedTakeoff.openings.map((item) => (
-                      <div key={item.type} className="flex items-center justify-between text-sm">
-                        <span>{item.type}</span>
-                        <span>{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/40">Other elements</p>
-                  <div className="mt-3 space-y-2">
-                    {payload.detailedTakeoff.others.length ? (
-                      payload.detailedTakeoff.others.map((item) => (
-                        <div key={item.type} className="flex items-center justify-between text-sm">
-                          <span>{item.type}</span>
-                          <span>{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-white/45">No additional element classes detected.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              </SectionCard>
             </div>
-          </SectionCard>
-
-          <SectionCard title="Material Estimate" icon={<Ruler className="h-4 w-4" />}>
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-white/5 text-white/45">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Material</th>
-                    <th className="px-3 py-2 font-medium">Element</th>
-                    <th className="px-3 py-2 font-medium">Qty</th>
-                    <th className="px-3 py-2 font-medium">Basis</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payload.materialEstimate.map((row) => (
-                    <tr key={`${row.material}-${row.elementType}-${row.unit}`} className="border-t border-white/10">
-                      <td className="px-3 py-2 text-white/85">{row.material}</td>
-                      <td className="px-3 py-2 text-white/70">{row.elementType}</td>
-                      <td className="px-3 py-2 text-white/85">
-                        {formatNumber(row.quantityRange.min)} - {formatNumber(row.quantityRange.max)} {row.unit}
-                        <div className="text-[11px] text-white/45">mid {formatNumber(row.quantity)} {row.unit}</div>
-                      </td>
-                      <td className="px-3 py-2 text-white/50">{row.basis}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-white/40">Material totals</p>
-                <p className="mt-2 text-2xl font-semibold">{payload.materialTotals.totalElements}</p>
-                <p className="text-sm text-white/50">
-                  quantity range {formatNumber(payload.materialTotals.totalQuantityRange.min)} - {formatNumber(payload.materialTotals.totalQuantityRange.max)}
-                </p>
-                <p className="text-sm text-white/50">mid {formatNumber(payload.materialTotals.totalQuantity)}</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-white/40">Model context</p>
-                <p className="mt-2 text-sm text-white/70">Session version {data.session.currentVersionNumber}</p>
-                <p className="text-sm text-white/70">Validation snapshot {data.validationSnapshot?.status ?? "missing"}</p>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Schedule Estimate" icon={<CalendarDays className="h-4 w-4" />}>
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Structural</p>
-                <p className="mt-2 text-xl font-semibold">{payload.timeEstimate.phaseDays.structural} days</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Envelope</p>
-                <p className="mt-2 text-xl font-semibold">{payload.timeEstimate.phaseDays.envelope} days</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Finishes</p>
-                <p className="mt-2 text-xl font-semibold">{payload.timeEstimate.phaseDays.finishes} days</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Services</p>
-                <p className="mt-2 text-xl font-semibold">{payload.timeEstimate.phaseDays.services} days</p>
-              </div>
-            </div>
-            <p className="mt-4 text-sm text-white/55">
-              Duration band: {payload.timeEstimate.durationRangeDays.min} - {payload.timeEstimate.durationRangeDays.max} days. {payload.timeEstimate.basis}
-            </p>
-          </SectionCard>
-
-          <SectionCard title="Workforce Estimate" icon={<HardHat className="h-4 w-4" />}>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Recommended workers</p>
-                <p className="mt-2 text-2xl font-semibold">{payload.workforceEstimate.totalRecommendedWorkers}</p>
-                <p className="mt-1 text-sm text-white/55">
-                  range {payload.workforceEstimate.totalWorkerRange.min} - {payload.workforceEstimate.totalWorkerRange.max}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Peak crew size</p>
-                <p className="mt-2 text-2xl font-semibold">{payload.workforceEstimate.peakCrewSize}</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Project handoff</p>
-                <p className="mt-2 text-sm text-white/70">Ready for company approval and hiring gate.</p>
-              </div>
-            </div>
-
-                  <SectionCard title="Element Basis" icon={<FileText className="h-4 w-4" />}>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-white/40">Aggregate geometry</p>
-                        <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/75">
-                          <div>
-                            <p className="text-white/40 text-[11px] uppercase tracking-[0.14em]">Elements</p>
-                            <p className="mt-1 font-semibold">{payload.dimensionSummary.totalElements}</p>
-                          </div>
-                          <div>
-                            <p className="text-white/40 text-[11px] uppercase tracking-[0.14em]">Total volume</p>
-                            <p className="mt-1 font-semibold">{formatNumber(payload.dimensionSummary.totalVolume)} cum</p>
-                          </div>
-                          <div>
-                            <p className="text-white/40 text-[11px] uppercase tracking-[0.14em]">Footprint area</p>
-                            <p className="mt-1 font-semibold">{formatNumber(payload.dimensionSummary.totalFootprintArea)} sqm</p>
-                          </div>
-                          <div>
-                            <p className="text-white/40 text-[11px] uppercase tracking-[0.14em]">Surface area</p>
-                            <p className="mt-1 font-semibold">{formatNumber(payload.dimensionSummary.totalSurfaceArea)} sqm</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-white/40">Strict basis</p>
-                        <p className="mt-3 text-sm leading-6 text-white/70">
-                          Each element is classified from its bounding dimensions first, then checked against its IFC type label. Material takeoff, crew counts, and schedule all use the geometry-derived dimensions and safety allowances shown below.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-white/5">
-                      <div className="max-h-[26rem] overflow-y-auto">
-                        <table className="w-full text-left text-sm">
-                          <thead className="sticky top-0 bg-[#141927] text-white/45">
-                            <tr>
-                              <th className="px-3 py-2 font-medium">Element</th>
-                              <th className="px-3 py-2 font-medium">Class</th>
-                              <th className="px-3 py-2 font-medium">Dimensions</th>
-                              <th className="px-3 py-2 font-medium">Area / Vol.</th>
-                              <th className="px-3 py-2 font-medium">Labor</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {payload.elementAssessments.map((item) => (
-                              <tr key={item.id} className="border-t border-white/10 align-top">
-                                <td className="px-3 py-2 text-white/85">
-                                  <div className="font-medium">{item.name}</div>
-                                  <div className="text-[11px] text-white/40 break-all">{item.rawType}</div>
-                                </td>
-                                <td className="px-3 py-2 text-white/70 capitalize">{item.classification}</td>
-                                <td className="px-3 py-2 text-white/75">
-                                  {formatNumber(item.dimensions.width, 2)}m x {formatNumber(item.dimensions.depth, 2)}m x {formatNumber(item.dimensions.height, 2)}m
-                                </td>
-                                <td className="px-3 py-2 text-white/75">
-                                  {formatNumber(item.metrics.faceArea)} sqm
-                                  <div className="text-[11px] text-white/45">vol {formatNumber(item.metrics.volume)} cum</div>
-                                </td>
-                                <td className="px-3 py-2 text-white/75">{formatNumber(item.laborDays)} days</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </SectionCard>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {payload.recommendedWorkerMix.map((worker) => (
-                <div key={worker.role} className="rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between">
-                  <span className="capitalize text-white/80">{worker.role.replaceAll("_", " ")}</span>
-                  <span className="font-semibold">{worker.count}</span>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
-          {payload.costEstimate && (
-            <SectionCard title="Financial Estimate" icon={<Building2 className="h-4 w-4" />}>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Material Cost</p>
-                  <p className="mt-2 text-xl font-semibold">${formatNumber(payload.costEstimate.totalMaterialCost, 0)}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Labor Cost</p>
-                  <p className="mt-2 text-xl font-semibold">${formatNumber(payload.costEstimate.totalLaborCost, 0)}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Contingency (10%)</p>
-                  <p className="mt-2 text-xl font-semibold">${formatNumber(payload.costEstimate.contingencyCost, 0)}</p>
-                </div>
-                <div className="col-span-full rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 mt-2">
-                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/70">Estimated Total Budget</p>
-                  <p className="mt-2 text-3xl font-bold text-emerald-100">${formatNumber(payload.costEstimate.totalBudget, 0)}</p>
-                  <p className="mt-1 text-[11px] text-white/50">Includes materials, labor, and 10% contingency.</p>
-                </div>
-              </div>
-            </SectionCard>
           )}
 
-          <SectionCard title="Project Handoff" icon={<Building2 className="h-4 w-4" />}>
-            <div className="space-y-4 text-sm text-white/75">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-white/40">Next step</p>
-                <p className="mt-2 text-white/80">{payload.projectHandoff.nextStep}</p>
-              </div>
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-amber-200/70">Warnings</p>
-                {payload.projectHandoff.warnings.length ? (
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100/85">
-                    {payload.projectHandoff.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-white/65">No critical warnings detected.</p>
-                )}
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-white/40">Assumptions</p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-white/70">
-                  {payload.projectHandoff.assumptions.map((assumption) => (
-                    <li key={assumption}>{assumption}</li>
-                  ))}
-                </ul>
+          {activeTab === "timeline" && (
+            <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <SectionCard title="Project Timeline" icon={<Sparkles className="h-4 w-4" />}>
+                <ProjectTimeline phases={payload.projectTimeline || []} />
+                <p className="mt-4 text-sm text-white/55">
+                  Each phase is sequenced from planning through handoff with duration estimates, dependencies, and deliverables.
+                </p>
+              </SectionCard>
+
+              <div className="space-y-6">
+                <SectionCard title="Schedule Estimate" icon={<CalendarDays className="h-4 w-4" />}>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Structural</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.structural} days</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Envelope</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.envelope} days</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Finishes</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.finishes} days</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Services</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.services} days</p>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm text-white/55">
+                    Duration band: {payload.timeEstimate.durationRangeDays.min} - {payload.timeEstimate.durationRangeDays.max} days. {payload.timeEstimate.basis}
+                  </p>
+                </SectionCard>
+
+                <SectionCard title="Project Handoff" icon={<Building2 className="h-4 w-4" />}>
+                  <div className="space-y-4 text-sm text-white/75">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/40">Next step</p>
+                      <p className="mt-2 text-white/80">{payload.projectHandoff.nextStep}</p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-amber-200/70">Warnings</p>
+                      {payload.projectHandoff.warnings.length ? (
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100/85">
+                          {payload.projectHandoff.warnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-white/65">No critical warnings detected.</p>
+                      )}
+                    </div>
+                  </div>
+                </SectionCard>
               </div>
             </div>
-          </SectionCard>
-        </div>
+          )}
+
+          {activeTab === "materials" && (
+            <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <SectionCard title="Takeoff Summary" icon={<ClipboardList className="h-4 w-4" />}>
+                <div className="space-y-4 text-sm text-white/75">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {Object.entries(payload.elementCounts).map(([type, count]) => (
+                      <div key={type} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">{type}</p>
+                        <p className="mt-1 text-lg font-semibold text-white">{count}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Detailed structural counts</p>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      {payload.detailedTakeoff.structural.map((item) => (
+                        <div key={item.type} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                          <span className="capitalize text-white/80">{item.type}</span>
+                          <span className="text-white/90">{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/40">Openings</p>
+                      <div className="mt-3 space-y-2">
+                        {payload.detailedTakeoff.openings.map((item) => (
+                          <div key={item.type} className="flex items-center justify-between text-sm text-white/75">
+                            <span className="capitalize">{item.type}</span>
+                            <span>{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/40">Other elements</p>
+                      <div className="mt-3 space-y-2">
+                        {payload.detailedTakeoff.others.length ? (
+                          payload.detailedTakeoff.others.map((item) => (
+                            <div key={item.type} className="flex items-center justify-between text-sm text-white/75">
+                              <span className="capitalize">{item.type}</span>
+                              <span>{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-white/45">No additional element classes detected.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Material Estimate" icon={<Ruler className="h-4 w-4" />}>
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+                  <div className="max-h-[30rem] overflow-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="sticky top-0 bg-[#151b29] text-white/45">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Material</th>
+                          <th className="px-3 py-2 font-medium">Element</th>
+                          <th className="px-3 py-2 font-medium">Qty</th>
+                          <th className="px-3 py-2 font-medium">Basis</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payload.materialEstimate.map((row) => (
+                          <tr key={`${row.material}-${row.elementType}-${row.unit}`} className="border-t border-white/10 align-top">
+                            <td className="px-3 py-2 text-white/85">{row.material}</td>
+                            <td className="px-3 py-2 text-white/70 capitalize">{row.elementType}</td>
+                            <td className="px-3 py-2 text-white/85">
+                              {formatNumber(row.quantityRange.min)} - {formatNumber(row.quantityRange.max)} {row.unit}
+                              <div className="text-[11px] text-white/45">mid {formatNumber(row.quantity)} {row.unit}</div>
+                            </td>
+                            <td className="px-3 py-2 text-white/55">{row.basis}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Material totals</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{payload.materialTotals.totalElements}</p>
+                    <p className="text-sm text-white/50">
+                      quantity range {formatNumber(payload.materialTotals.totalQuantityRange.min)} - {formatNumber(payload.materialTotals.totalQuantityRange.max)}
+                    </p>
+                    <p className="text-sm text-white/50">mid {formatNumber(payload.materialTotals.totalQuantity)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Model context</p>
+                    <p className="mt-2 text-sm text-white/70">Session version {data.session.currentVersionNumber}</p>
+                    <p className="text-sm text-white/70">Validation snapshot {data.validationSnapshot?.status ?? "missing"}</p>
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
+          )}
+
+          {activeTab === "workforce" && (
+            <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <SectionCard title="Phase Workforce Plan" icon={<Users className="h-4 w-4" />}>
+                <PhaseWorkforceGrid phases={payload.workforceByPhase || []} />
+              </SectionCard>
+
+              <SectionCard title="Crew Mix" icon={<HardHat className="h-4 w-4" />}>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {payload.recommendedWorkerMix.map((worker) => (
+                    <div key={worker.role} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 flex items-center justify-between">
+                      <span className="capitalize text-white/80">{worker.role.replaceAll("_", " ")}</span>
+                      <span className="font-semibold text-white">{worker.count}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Recommended workers</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{payload.workforceEstimate.totalRecommendedWorkers}</p>
+                    <p className="mt-1 text-sm text-white/55">
+                      range {payload.workforceEstimate.totalWorkerRange.min} - {payload.workforceEstimate.totalWorkerRange.max}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Peak crew size</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{payload.workforceEstimate.peakCrewSize}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Handoff</p>
+                    <p className="mt-2 text-sm text-white/70">Ready for company approval and hiring gate.</p>
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
+          )}
+
+          {activeTab === "financial" && payload.costEstimate && (
+            <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+              <SectionCard title="Financial Estimate" icon={<Building2 className="h-4 w-4" />}>
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Material cost</p>
+                    <p className="mt-2 text-xl font-semibold text-white">{formatCurrencyINR(payload.costEstimate.totalMaterialCost)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Labour cost</p>
+                    <p className="mt-2 text-xl font-semibold text-white">{formatCurrencyINR(payload.costEstimate.totalLaborCost)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Contingency (10%)</p>
+                    <p className="mt-2 text-xl font-semibold text-white">{formatCurrencyINR(payload.costEstimate.contingencyCost)}</p>
+                  </div>
+                  <div className="col-span-full rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5 mt-2">
+                    <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/70">Estimated total budget</p>
+                    <p className="mt-2 text-3xl font-bold text-emerald-100">{formatCurrencyINR(payload.costEstimate.totalBudget)}</p>
+                    <p className="mt-1 text-[11px] text-white/50">Includes materials, labour, and 10% contingency.</p>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Project Handoff" icon={<Building2 className="h-4 w-4" />}>
+                <div className="space-y-4 text-sm text-white/75">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Next step</p>
+                    <p className="mt-2 text-white/80">{payload.projectHandoff.nextStep}</p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-amber-200/70">Warnings</p>
+                    {payload.projectHandoff.warnings.length ? (
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100/85">
+                        {payload.projectHandoff.warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-white/65">No critical warnings detected.</p>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Assumptions</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-white/70">
+                      {payload.projectHandoff.assumptions.map((assumption) => (
+                        <li key={assumption}>{assumption}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
+          )}
+        </motion.div>
       </main>
     </div>
   );

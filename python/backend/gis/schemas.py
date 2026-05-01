@@ -67,6 +67,7 @@ class OsmContextResult(BaseModel):
     places: List[OsmFeature]
     buildings: List[OsmFeature] = Field(default_factory=list)
     exclusions: List[OsmFeature] = Field(default_factory=list)
+    infrastructure: List[OsmFeature] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +151,47 @@ class RoadAccessResult(BaseModel):
     warning: Optional[str] = None
 
 
+class EnvironmentalMetricSet(BaseModel):
+    nearest_water_distance_m: Optional[float] = None
+    nearest_forest_distance_m: Optional[float] = None
+    nearest_wetland_distance_m: Optional[float] = None
+    natural_cover_ratio: float = 0.0
+    water_overlap_area_sqm: float = 0.0
+    protected_overlap_area_sqm: float = 0.0
+    hazardous_landuse_count: int = 0
+
+
+class EnvironmentalSummary(BaseModel):
+    suitability_score: float
+    sensitivity_level: str
+    flood_risk_level: str
+    biodiversity_level: str
+    constraints: List[str] = Field(default_factory=list)
+    opportunities: List[str] = Field(default_factory=list)
+    nearby_features: List[str] = Field(default_factory=list)
+    metrics: EnvironmentalMetricSet
+
+
+class InfrastructureMetricSet(BaseModel):
+    nearest_power_distance_m: Optional[float] = None
+    nearest_water_infra_distance_m: Optional[float] = None
+    nearest_sewer_distance_m: Optional[float] = None
+    nearest_telecom_distance_m: Optional[float] = None
+    nearest_transit_distance_m: Optional[float] = None
+    nearest_rail_distance_m: Optional[float] = None
+
+
+class InfrastructureSummary(BaseModel):
+    readiness_score: float
+    readiness_level: str
+    utility_coverage_level: str
+    transit_access_level: str
+    available_utilities: List[str] = Field(default_factory=list)
+    missing_utilities: List[str] = Field(default_factory=list)
+    logistics_notes: List[str] = Field(default_factory=list)
+    metrics: InfrastructureMetricSet
+
+
 class FitValidationResult(BaseModel):
     fit_status: str  # valid | partial | invalid
     fit_score: float
@@ -166,6 +208,8 @@ class FitValidationResult(BaseModel):
     nearby_building_access: RoadAccessResult
     has_building_collision: bool = False
     has_water_collision: bool = False
+    environmental_summary: Optional[EnvironmentalSummary] = None
+    infrastructure_summary: Optional[InfrastructureSummary] = None
     inside_geometry: Optional[dict] = None
     overflow_geometry: Optional[dict] = None
     messages: List[str]

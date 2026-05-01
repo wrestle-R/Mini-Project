@@ -20,7 +20,7 @@ CACHE: Dict[str, OsmContextResult] = {}
 
 
 def _cache_key(bbox: BoundingBox) -> str:
-    raw = f"{bbox.min_lat:.4f},{bbox.min_lon:.4f},{bbox.max_lat:.4f},{bbox.max_lon:.4f}"
+    raw = f"v2:{bbox.min_lat:.4f},{bbox.min_lon:.4f},{bbox.max_lat:.4f},{bbox.max_lon:.4f}"
     return hashlib.md5(raw.encode()).hexdigest()
 
 
@@ -33,12 +33,25 @@ def _build_query(bbox: BoundingBox, max_road: int, max_landuse: int, max_buildin
   way["highway"]({b});
   way["landuse"]({b});
   way["building"]({b});
-  way["natural"~"water|wood|scrub|heath"]({b});
+  way["natural"~"water|wood|scrub|heath|wetland"]({b});
   way["landuse"~"brownfield|greenfield|construction|vacant"]({b});
+  way["power"]({b});
+  way["railway"]({b});
+  way["man_made"~"water_tower|water_works|reservoir_covered|wastewater_plant|mast"]({b});
+  way["communication"]({b});
   relation["landuse"]({b});
   relation["building"]({b});
-  relation["natural"~"water|wood|scrub|heath"]({b});
+  relation["natural"~"water|wood|scrub|heath|wetland"]({b});
+  relation["power"]({b});
+  relation["railway"]({b});
+  relation["man_made"~"water_tower|water_works|reservoir_covered|wastewater_plant|mast"]({b});
   node["place"]({b});
+  node["highway"="bus_stop"]({b});
+  node["railway"~"station|halt|tram_stop"]({b});
+  node["amenity"~"bus_station|ferry_terminal|parking"]({b});
+  node["power"]({b});
+  node["man_made"~"water_tower|water_works|reservoir_covered|wastewater_plant|mast"]({b});
+  node["communication"]({b});
 );
 out geom {max_road + max_landuse + max_buildings + 100};
 """
@@ -65,10 +78,35 @@ def _parse_element(el: dict) -> OsmFeature:
         feature_type = "landuse"
     elif "building" in tags:
         feature_type = "building"
+    elif (
+        "power" in tags
+        or "railway" in tags
+        or "communication" in tags
+        or tags.get("highway") == "bus_stop"
+        or tags.get("amenity") in {"bus_station", "ferry_terminal", "parking"}
+        or tags.get("man_made") in {"water_tower", "water_works", "reservoir_covered", "wastewater_plant", "mast"}
+    ):
+        feature_type = "infrastructure"
     elif "natural" in tags and tags["natural"] in ["water", "wood"]:
         feature_type = "exclusion"  # Custom type for water/forest
+    elif "natural" in tags and tags["natural"] in ["scrub", "heath", "wetland"]:
+        feature_type = "exclusion"
     else:
         feature_type = "place"
+
+    if feature_type == "infrastructure":
+        if "power" in tags:
+            tags["infrastructure_type"] = "power"
+        elif "railway" in tags:
+            tags["infrastructure_type"] = "rail"
+        elif tags.get("highway") == "bus_stop" or tags.get("amenity") in {"bus_station", "ferry_terminal", "parking"}:
+            tags["infrastructure_type"] = "transit"
+        elif tags.get("man_made") in {"water_tower", "water_works", "reservoir_covered"}:
+            tags["infrastructure_type"] = "water"
+        elif tags.get("man_made") == "wastewater_plant":
+            tags["infrastructure_type"] = "sewer"
+        else:
+            tags["infrastructure_type"] = "telecom"
 
     return OsmFeature(feature_type=feature_type, tags=tags, geometry=geom)
 
@@ -100,6 +138,7 @@ async def fetch_osm_context(
     places: List[OsmFeature] = []
     buildings: List[OsmFeature] = []
     exclusions: List[OsmFeature] = []
+    infrastructure: List[OsmFeature] = []
 
     for el in data.get("elements", []):
         feat = _parse_element(el)
@@ -111,6 +150,8 @@ async def fetch_osm_context(
             buildings.append(feat)
         elif feat.feature_type == "exclusion":
             exclusions.append(feat)
+        elif feat.feature_type == "infrastructure":
+            infrastructure.append(feat)
         else:
             places.append(feat)
 
@@ -121,6 +162,7 @@ async def fetch_osm_context(
         places=places[:50],
         buildings=buildings[:max_building_results],
         exclusions=exclusions[:100],
+        infrastructure=infrastructure[:200],
     )
     CACHE[key] = result
     return result

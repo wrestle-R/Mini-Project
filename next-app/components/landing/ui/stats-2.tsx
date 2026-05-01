@@ -5,7 +5,7 @@ import { motion, useInView } from 'framer-motion'
 
 interface StatCounter {
   label: string
-  value: string
+  value: number
   suffix: string
 }
 

@@ -302,26 +302,26 @@ def _get_material_plan(kind: str, dimensions: Dict[str, float], metrics: Dict[st
 
 def _labor_days(kind: str, metrics: Dict[str, float]):
     if kind == "wall":
-        return _round(max(metrics["faceArea"] / 18, metrics["volume"] * 1.35))
+        return _round(max(metrics["faceArea"] / 42, metrics["volume"] * 0.48))
     if kind == "slab":
-        return _round(max(metrics["footprintArea"] / 24, metrics["volume"] * 1.55))
+        return _round(max(metrics["footprintArea"] / 38, metrics["volume"] * 0.52))
     if kind == "roof":
-        return _round(max(metrics["footprintArea"] / 22, metrics["volume"] * 1.65))
+        return _round(max(metrics["footprintArea"] / 36, metrics["volume"] * 0.56))
     if kind == "column":
-        return _round(max(metrics["volume"] * 2.6, metrics["surfaceArea"] / 16))
+        return _round(max(metrics["volume"] * 0.92, metrics["surfaceArea"] / 28))
     if kind == "beam":
-        return _round(max(metrics["volume"] * 2.3, metrics["surfaceArea"] / 18))
+        return _round(max(metrics["volume"] * 0.82, metrics["surfaceArea"] / 30))
     if kind == "stair":
-        return _round(max(metrics["volume"] * 2.8, metrics["surfaceArea"] / 14))
+        return _round(max(metrics["volume"] * 0.96, metrics["surfaceArea"] / 24))
     if kind == "door":
         return _round(max(0.35, metrics["faceArea"] / 8))
     if kind == "window":
         return _round(max(0.4, metrics["faceArea"] / 7))
     if kind == "member":
-        return _round(max(metrics["volume"] * 2.9, metrics["surfaceArea"] / 13))
+        return _round(max(metrics["volume"] * 1.0, metrics["surfaceArea"] / 24))
     if kind == "space":
         return _round(max(0.5, metrics["volume"] * 0.1))
-    return _round(max(metrics["volume"] * 1.8, metrics["surfaceArea"] / 20))
+    return _round(max(metrics["volume"] * 0.64, metrics["surfaceArea"] / 28))
 
 
 def _build_element_assessment(element: Dict[str, Any]):
@@ -526,6 +526,9 @@ def _analysis_node(state: ReportState):
         "Missing or ambiguous geometry is classified using the safer material and labor profile.",
         "Material allowances include additional waste, shuttering, reinforcement, and finishing overhead.",
     ]
+    fit_result = request.get("fitResult") or {}
+    environmental_summary = fit_result.get("environmental_summary") or fit_result.get("environmentalSummary") or {}
+    infrastructure_summary = fit_result.get("infrastructure_summary") or fit_result.get("infrastructureSummary") or {}
 
     total_labor_days = 0.0
     total_volume = 0.0
@@ -569,6 +572,23 @@ def _analysis_node(state: ReportState):
         warnings.append("No wall-like elements were detected in the model geometry.")
     if not element_counts.get("slab"):
         warnings.append("No slab-like elements were detected in the model geometry.")
+    if environmental_summary.get("flood_risk_level") in {"high", "critical"}:
+        warnings.append("GIS screening flagged elevated flood or water-edge risk for the selected parcel.")
+    if environmental_summary.get("sensitivity_level") in {"high", "critical"}:
+        warnings.append("GIS screening detected environmentally sensitive context that may affect approvals and setbacks.")
+    if infrastructure_summary.get("readiness_level") in {"low", "elevated"}:
+        warnings.append("GIS screening indicates below-target infrastructure readiness, so utility extension scope should be validated.")
+    if infrastructure_summary.get("missing_utilities"):
+        warnings.append(
+            "Missing or distant utility categories: "
+            + ", ".join(sorted(str(item) for item in infrastructure_summary.get("missing_utilities", [])))
+            + "."
+        )
+
+    assumptions.extend([
+        "Environmental and infrastructure scores are GIS screening indicators derived from mapped OSM context and should be confirmed during due diligence.",
+        "Utility readiness reflects mapped proximity, not guaranteed service capacity or entitlement.",
+    ])
 
     building_type = _detect_building_type(_safe_model_project_id(model), request.get("fitResult") or {}, element_counts)
     if building_type == "house":
@@ -599,16 +619,31 @@ def _analysis_node(state: ReportState):
         material_totals["totalQuantityRange"]["min"] = _round(material_totals["totalQuantityRange"]["min"] + item["quantityRange"]["min"])
         material_totals["totalQuantityRange"]["max"] = _round(material_totals["totalQuantityRange"]["max"] + item["quantityRange"]["max"])
 
-    duration_mid = max(1, math.ceil(total_labor_days))
-    phase_days = {
-        "planning": max(1, math.ceil(duration_mid * 0.12)),
-        "sitePreparation": max(1, math.ceil(duration_mid * 0.10)),
-        "structural": max(1, math.ceil(duration_mid * 0.38)),
-        "mep": max(1, math.ceil(duration_mid * 0.15)),
-        "finishes": max(1, math.ceil(duration_mid * 0.17)),
-        "management": max(1, math.ceil(duration_mid * 0.08)),
+    duration_scale = 0.42 if building_type == "house" else 0.55
+    duration_mid = max(1, math.ceil(total_labor_days * duration_scale))
+    phase_shares = {
+        "planning": 0.13,
+        "sitePreparation": 0.09,
+        "structural": 0.34,
+        "mep": 0.16,
+        "finishes": 0.20,
+        "management": 0.08,
     }
+    # compute preliminary phase days from mid estimate
+    phase_days = {k: max(1, math.ceil(duration_mid * v)) for k, v in phase_shares.items()}
     estimated_duration_days = sum(phase_days.values())
+    # enforce sensible project duration bounds (6 - 12 months) so small samples don't produce unrealistically short timelines
+    MIN_DURATION_DAYS = 180  # ~6 months
+    MAX_DURATION_DAYS = 365  # ~12 months
+    if estimated_duration_days < MIN_DURATION_DAYS:
+        scale = MIN_DURATION_DAYS / max(estimated_duration_days, 1)
+        phase_days = {k: max(1, math.ceil(v * scale)) for k, v in phase_days.items()}
+        estimated_duration_days = sum(phase_days.values())
+    elif estimated_duration_days > MAX_DURATION_DAYS:
+        scale = MAX_DURATION_DAYS / estimated_duration_days
+        phase_days = {k: max(1, math.ceil(v * scale)) for k, v in phase_days.items()}
+        estimated_duration_days = sum(phase_days.values())
+
     duration_range_days = {
         "min": max(1, math.ceil(estimated_duration_days * 0.8)),
         "max": max(1, math.ceil(estimated_duration_days * 1.3)),
@@ -619,11 +654,19 @@ def _analysis_node(state: ReportState):
         "material_lines": len(material_estimate),
         "estimated_duration_days": estimated_duration_days,
     }, flush=True)
-    worker_mid = max(3, math.ceil(math.sqrt(max(total_footprint_area, 1.0)) / 2 + math.cbrt(max(total_volume, 1.0)) * 0.9 + len(elements) / 18))
+    worker_mid = max(
+        4,
+        math.ceil(
+            math.sqrt(max(total_footprint_area, 1.0)) / 10 +
+            math.cbrt(max(total_volume, 1.0)) / 5 +
+            len(elements) / 25 +
+            (0.8 if building_type == "house" else 1.0)
+        ),
+    )
     workforce_estimate = {
         "totalRecommendedWorkers": worker_mid,
         "peakCrewSize": worker_mid,
-        "totalWorkerRange": {"min": max(2, math.ceil(worker_mid * 0.8)), "max": max(3, math.ceil(worker_mid * 1.25))},
+        "totalWorkerRange": {"min": max(3, math.ceil(worker_mid * 0.75)), "max": max(4, math.ceil(worker_mid * 1.2))},
         "recommendedWorkerMix": [],
     }
 
@@ -799,60 +842,60 @@ def _canonical_phase_id(phase_id: Any = None, phase_name: Any = None, fallback: 
 
 def _build_phase_workers(phase: Dict[str, Any], analysis: Dict[str, Any], phase_materials: Dict[str, Any]):
     complexity = _clamp(
-        math.sqrt(max(analysis["dimensionSummary"]["totalFootprintArea"], 1.0)) / 6 +
-        math.cbrt(max(analysis["dimensionSummary"]["totalVolume"], 1.0)) / 4 +
-        len(phase_materials["materials"]) / 2,
-        1.0,
-        8.0,
+        math.sqrt(max(analysis["dimensionSummary"]["totalFootprintArea"], 1.0)) / 12 +
+        math.cbrt(max(analysis["dimensionSummary"]["totalVolume"], 1.0)) / 8 +
+        len(phase_materials["materials"]) / 12,
+        0.75,
+        3.0,
     )
     phase_name = phase["name"].lower()
     role_templates: List[tuple[str, str, str, float, List[str]]] = [
-        ("project_manager", "Project Manager", "management", 0.8, ["Coordinate the project", "Track schedule and budget"]),
-        ("site_supervisor", "Site Supervisor", "management", 1.0, ["Direct daily site execution", "Check trade coordination"]),
-        ("safety_officer", "Safety Officer", "management", 0.7, ["Enforce safety controls", "Monitor risk on site"]),
+        ("project_manager", "Project Manager", "management", 0.55, ["Coordinate the project", "Track schedule and budget"]),
+        ("site_supervisor", "Site Supervisor", "management", 0.7, ["Direct daily site execution", "Check trade coordination"]),
+        ("safety_officer", "Safety Officer", "management", 0.45, ["Enforce safety controls", "Monitor risk on site"]),
     ]
     if "planning" in phase_name or "design" in phase_name:
         role_templates += [
-            ("architect", "Architect", "engineering", 1.0, ["Define layout and aesthetics", "Resolve spatial coordination"]),
-            ("structural_engineer", "Structural Engineer", "engineering", 1.0, ["Validate structure", "Confirm load strategy"]),
-            ("civil_engineer", "Civil Engineer", "engineering", 1.0, ["Plan site works", "Coordinate foundation and drainage"]),
-            ("quantity_surveyor", "Quantity Surveyor", "engineering", 1.0, ["Estimate quantities", "Prepare budget baseline"]),
+            ("architect", "Architect", "engineering", 0.6, ["Define layout and aesthetics", "Resolve spatial coordination"]),
+            ("structural_engineer", "Structural Engineer", "engineering", 0.6, ["Validate structure", "Confirm load strategy"]),
+            ("civil_engineer", "Civil Engineer", "engineering", 0.55, ["Plan site works", "Coordinate foundation and drainage"]),
+            ("quantity_surveyor", "Quantity Surveyor", "engineering", 0.55, ["Estimate quantities", "Prepare budget baseline"]),
         ]
     elif "site" in phase_name or "preparation" in phase_name:
         role_templates += [
-            ("surveyor", "Surveyor", "specialized", 1.0, ["Set out boundaries", "Mark levels and control points"]),
-            ("equipment_operator", "Equipment Operator", "specialized", 1.2, ["Operate JCB, cranes, and dozers"]),
-            ("excavation_worker", "Excavation Worker", "labor", 1.8, ["Clear land", "Dig and prepare foundations"]),
-            ("helper", "General Helper", "labor", 2.0, ["Support setup and logistics"]),
+            ("surveyor", "Surveyor", "specialized", 0.75, ["Set out boundaries", "Mark levels and control points"]),
+            ("equipment_operator", "Equipment Operator", "specialized", 0.9, ["Operate JCB, cranes, and dozers"]),
+            ("excavation_worker", "Excavation Worker", "labor", 1.2, ["Clear land", "Dig and prepare foundations"]),
+            ("helper", "General Helper", "labor", 1.4, ["Support setup and logistics"]),
         ]
     elif "structural" in phase_name or "construction" in phase_name:
         role_templates += [
-            ("mason", "Mason", "labor", 2.8, ["Brickwork and wall building"]),
-            ("carpenter", "Carpenter", "labor", 2.0, ["Formwork and shuttering"]),
-            ("steel_fixer", "Steel Fixer", "labor", 2.4, ["Reinforcement placement"]),
-            ("concrete_worker", "Concrete Worker", "labor", 2.2, ["Pouring and finishing concrete"]),
-            ("welder", "Welder", "specialized", 1.0, ["Structural joints and metal frame connections"]),
-            ("equipment_operator", "Equipment Operator", "specialized", 1.0, ["Hoisting and heavy equipment handling"]),
+            ("mason", "Mason", "labor", 1.4, ["Brickwork and wall building"]),
+            ("carpenter", "Carpenter", "labor", 1.1, ["Formwork and shuttering"]),
+            ("steel_fixer", "Steel Fixer", "labor", 1.3, ["Reinforcement placement"]),
+            ("concrete_worker", "Concrete Worker", "labor", 1.2, ["Pouring and finishing concrete"]),
+            ("welder", "Welder", "specialized", 0.65, ["Structural joints and metal frame connections"]),
+            ("equipment_operator", "Equipment Operator", "specialized", 0.75, ["Hoisting and heavy equipment handling"]),
         ]
     elif "mep" in phase_name or "mechanical" in phase_name or "electrical" in phase_name:
         role_templates += [
-            ("electrician", "Electrician", "specialized", 2.0, ["Wiring and lighting systems"]),
-            ("plumber", "Plumber", "specialized", 1.8, ["Water supply and drainage"]),
-            ("hvac_technician", "HVAC Technician", "specialized", 1.0, ["Ventilation and AC systems"]),
-            ("helper", "General Helper", "labor", 1.6, ["Material handling and support"]),
+            ("electrician", "Electrician", "specialized", 1.2, ["Wiring and lighting systems"]),
+            ("plumber", "Plumber", "specialized", 1.0, ["Water supply and drainage"]),
+            ("hvac_technician", "HVAC Technician", "specialized", 0.7, ["Ventilation and AC systems"]),
+            ("helper", "General Helper", "labor", 1.0, ["Material handling and support"]),
         ]
     elif "finish" in phase_name:
         role_templates += [
-            ("painter", "Painter", "labor", 1.8, ["Interior and exterior painting"]),
-            ("tile_setter", "Tile Setter", "labor", 1.6, ["Flooring and wet-area finishes"]),
-            ("glass_installer", "Glass Installer", "specialized", 1.0, ["Windows and glazing"]),
-            ("false_ceiling_worker", "False Ceiling Worker", "labor", 1.2, ["Ceiling systems and trim"]),
-            ("polisher", "Polisher", "specialized", 0.8, ["Final surface polish and detailing"]),
+            ("painter", "Painter", "labor", 1.0, ["Interior and exterior painting"]),
+            ("tile_setter", "Tile Setter", "labor", 0.9, ["Flooring and wet-area finishes"]),
+            ("glass_installer", "Glass Installer", "specialized", 0.7, ["Windows and glazing"]),
+            ("false_ceiling_worker", "False Ceiling Worker", "labor", 0.8, ["Ceiling systems and trim"]),
+            ("polisher", "Polisher", "specialized", 0.6, ["Final surface polish and detailing"]),
         ]
     else:
-        role_templates += [("quantity_surveyor", "Quantity Surveyor", "engineering", 0.8, ["Monitor quantities and handoff progress"])]
+        role_templates += [("quantity_surveyor", "Quantity Surveyor", "engineering", 0.5, ["Monitor quantities and handoff progress"])]
 
-    materials_factor = 1.0 + min(1.5, len(phase_materials["materials"]) / 6)
+    materials_factor = 1.0 + min(0.45, len(phase_materials["materials"]) / 30)
     workers = []
     for role, title, category, base_share, responsibilities in role_templates:
         quantity = max(1, round(base_share * complexity * materials_factor))
@@ -895,6 +938,10 @@ def _workforce_node(state: ReportState):
         })
         for worker in workers:
             aggregate[worker["role"]] = aggregate.get(worker["role"], 0) + worker["quantity"]
+    # Deduplicate management roles: assume the same project manager, site supervisor and safety officer cover all phases
+    for mgmt_role in ("project_manager", "site_supervisor", "safety_officer"):
+        if aggregate.get(mgmt_role, 0) > 0:
+            aggregate[mgmt_role] = 1
 
     recommended_worker_mix = [{"role": role, "count": count} for role, count in sorted(aggregate.items(), key=lambda item: item[0])]
     peak = max((phase["peakCrew"] for phase in workforce_by_phase), default=0)
@@ -964,6 +1011,8 @@ def _assemble_node(state: ReportState):
                 "footprintAreaSqm": state["request"]["fitResult"].get("model_footprint_area_sqm") or state["request"]["fitResult"].get("footprintAreaSqm") or None,
                 "utilizationRatio": state["request"]["fitResult"].get("utilization_ratio") or state["request"]["fitResult"].get("utilizationRatio") or None,
                 "roadAccess": state["request"]["fitResult"].get("road_access") or state["request"]["fitResult"].get("roadAccess") or None,
+                "environmentalSummary": state["request"]["fitResult"].get("environmental_summary") or state["request"]["fitResult"].get("environmentalSummary") or None,
+                "infrastructureSummary": state["request"]["fitResult"].get("infrastructure_summary") or state["request"]["fitResult"].get("infrastructureSummary") or None,
             },
             "dimensionSummary": analysis["dimensionSummary"],
             "elementCounts": analysis["elementCounts"],

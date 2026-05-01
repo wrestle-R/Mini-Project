@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import {
   Map,
   Sparkles,
@@ -20,6 +20,11 @@ import type { Object3D } from "three";
 import type { GisMapHandle } from "@/components/gis/GisMap";
 import type { MapEvent, SuggestionItem } from "@/components/gis/types";
 import ParcelCard from "@/components/gis/ParcelCard";
+import {
+  DEFAULT_COMPARISON_WEIGHTS,
+  rankParcels,
+  type ComparisonWeights,
+} from "@/lib/gis/comparison-engine";
 
 // Dynamic imports — no SSR for maplibre-gl (requires browser DOM)
 const GisMap = dynamic(() => import("@/components/gis/GisMap"), { ssr: false });
@@ -50,6 +55,9 @@ interface SavedParcel {
   centroid: [number, number];
   area: number;
   geojson: GeoJSON.Feature & { geometry: GeoJSON.Polygon };
+  analysis?: FitValidationResult | null;
+  sessionTitle?: string | null;
+  analyzedAt?: number | null;
 }
 
 interface ModelDimensions {
@@ -81,11 +89,67 @@ interface FitValidationResult {
     has_road_access: boolean;
     warning?: string | null;
   };
+  environmental_summary?: {
+    suitability_score: number;
+    sensitivity_level: string;
+    flood_risk_level: string;
+    biodiversity_level: string;
+    constraints: string[];
+    opportunities: string[];
+    nearby_features: string[];
+    metrics: {
+      nearest_water_distance_m: number | null;
+      nearest_forest_distance_m: number | null;
+      nearest_wetland_distance_m: number | null;
+      natural_cover_ratio: number;
+      water_overlap_area_sqm: number;
+      protected_overlap_area_sqm: number;
+      hazardous_landuse_count: number;
+    };
+  } | null;
+  infrastructure_summary?: {
+    readiness_score: number;
+    readiness_level: string;
+    utility_coverage_level: string;
+    transit_access_level: string;
+    available_utilities: string[];
+    missing_utilities: string[];
+    logistics_notes: string[];
+    metrics: {
+      nearest_power_distance_m: number | null;
+      nearest_water_infra_distance_m: number | null;
+      nearest_sewer_distance_m: number | null;
+      nearest_telecom_distance_m: number | null;
+      nearest_transit_distance_m: number | null;
+      nearest_rail_distance_m: number | null;
+    };
+  } | null;
   inside_geometry?: GeoJSON.Geometry | null;
   overflow_geometry?: GeoJSON.Geometry | null;
   has_building_collision?: boolean;
   has_water_collision?: boolean;
   messages: string[];
+}
+
+interface HistoricalInsights {
+  totalAnalyses: number;
+  totalReports: number;
+  validFitRate: number;
+  averageFitScore: number | null;
+  averageEnvironmentalScore: number | null;
+  averageInfrastructureScore: number | null;
+  averageUtilizationRatio: number | null;
+  recommendedSignals: string[];
+  topSuccessfulAnalyses: Array<{
+    id: string;
+    sessionTitle: string;
+    fitScore: number;
+    environmentalScore: number | null;
+    infrastructureScore: number | null;
+    estimatedDurationDays: number | null;
+    totalBudget: number | null;
+    completedAt: string;
+  }>;
 }
 
 const GIS_BACKEND = process.env.NEXT_PUBLIC_PYTHON_API_BASE_URL || "http://localhost:8000";
@@ -141,6 +205,14 @@ export default function GisLandSelectionPage() {
     workerMix: { role: string; count: number }[];
   } | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [comparisonWeights, setComparisonWeights] = useState<ComparisonWeights>(DEFAULT_COMPARISON_WEIGHTS);
+  const [historyInsights, setHistoryInsights] = useState<HistoricalInsights | null>(null);
+  const [loadingHistoryInsights, setLoadingHistoryInsights] = useState(false);
+
+  const rankedParcels = useMemo(
+    () => rankParcels(parcels, comparisonWeights),
+    [parcels, comparisonWeights]
+  );
 
   // Load parcels from localStorage
   useEffect(() => {
@@ -174,6 +246,40 @@ export default function GisLandSelectionPage() {
     fetchSessions();
   }, [token]);
 
+  useEffect(() => {
+    async function hydrateComparisonState() {
+      if (!token) return;
+      setLoadingHistoryInsights(true);
+      try {
+        const [prefRes, historyRes] = await Promise.all([
+          fetch("/api/contractor/gis/preferences", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch("/api/contractor/gis/history", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        if (prefRes.ok) {
+          const prefJson = await prefRes.json();
+          if (prefJson?.weights) {
+            setComparisonWeights(prefJson.weights);
+          }
+        }
+
+        if (historyRes.ok) {
+          const historyJson = await historyRes.json();
+          setHistoryInsights(historyJson?.history || null);
+        }
+      } catch (err) {
+        console.error("Failed to hydrate GIS comparison state", err);
+      } finally {
+        setLoadingHistoryInsights(false);
+      }
+    }
+    hydrateComparisonState();
+  }, [token]);
+
   // Save parcels to localStorage
   const saveParcels = useCallback((newParcels: SavedParcel[]) => {
     setParcels(newParcels);
@@ -198,6 +304,44 @@ export default function GisLandSelectionPage() {
   const handleDeleteParcel = useCallback((id: string) => {
     saveParcels(parcels.filter(p => p.id !== id));
   }, [parcels, saveParcels]);
+
+  const persistComparisonWeights = useCallback(async (nextWeights: ComparisonWeights) => {
+    setComparisonWeights(nextWeights);
+    if (!token) return;
+    try {
+      await fetch("/api/contractor/gis/preferences", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ weights: nextWeights }),
+      });
+    } catch (err) {
+      console.error("Failed to save GIS ranking preferences", err);
+    }
+  }, [token]);
+
+  const handleSaveAnalysisToComparison = useCallback(() => {
+    if (!selectedPolygon || !fitResult) return;
+
+    const nextParcel: SavedParcel = {
+      id: crypto.randomUUID(),
+      name: `${selectedSession?.title?.replace(/\.[^.]+$/, "") || "Parcel"} analysis ${parcels.length + 1}`,
+      coordinates: selectedPolygon.geojson.geometry.coordinates[0].map(
+        (point) => [point[0], point[1]] as [number, number]
+      ),
+      centroid: selectedPolygon.centroid,
+      area: selectedPolygon.areaSqm,
+      geojson: selectedPolygon.geojson,
+      analysis: fitResult,
+      sessionTitle: selectedSession?.title || null,
+      analyzedAt: Date.now(),
+    };
+
+    saveParcels([...parcels, nextParcel]);
+    setRightPanel("parcels");
+  }, [fitResult, parcels, saveParcels, selectedPolygon, selectedSession]);
 
   // ── Map event dispatcher (chat → map) ────────────────────────────────
   const handleMapEvent = useCallback((event: MapEvent) => {
@@ -978,6 +1122,18 @@ export default function GisLandSelectionPage() {
                   <span>Utilization: {fitResult.utilization_ratio.toFixed(1)}%</span>
                   <span>Suggested rot: {fitResult.suggested_rotation_deg.toFixed(1)}°</span>
                   <span>Overflow: {fitResult.overflow_area_sqm.toFixed(1)} sqm</span>
+                  {fitResult.environmental_summary && (
+                    <>
+                      <span>Env score: {fitResult.environmental_summary.suitability_score.toFixed(1)}/100</span>
+                      <span className="capitalize">Flood: {fitResult.environmental_summary.flood_risk_level}</span>
+                    </>
+                  )}
+                  {fitResult.infrastructure_summary && (
+                    <>
+                      <span>Infra score: {fitResult.infrastructure_summary.readiness_score.toFixed(1)}/100</span>
+                      <span className="capitalize">Utilities: {fitResult.infrastructure_summary.utility_coverage_level}</span>
+                    </>
+                  )}
                   <span className={fitResult.has_building_collision ? "text-red-400 col-span-2 mt-1 font-medium bg-red-500/10 p-1 rounded" : "hidden"}>
                     ⛔ Overlaps with existing building
                   </span>
@@ -985,6 +1141,32 @@ export default function GisLandSelectionPage() {
                     ⛔ Overlaps with water body
                   </span>
                 </div>
+                {(fitResult.environmental_summary || fitResult.infrastructure_summary) && (
+                  <div className="mt-2 grid gap-2">
+                    {fitResult.environmental_summary && (
+                      <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/5 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-emerald-300/75">Environmental</p>
+                        <p className="mt-1 text-[10px] text-white/55 capitalize">
+                          Sensitivity {fitResult.environmental_summary.sensitivity_level} · biodiversity {fitResult.environmental_summary.biodiversity_level}
+                        </p>
+                        <p className="mt-1 text-[10px] text-white/45">
+                          Nearby: {fitResult.environmental_summary.nearby_features.join(", ") || "No dominant mapped ecological feature"}
+                        </p>
+                      </div>
+                    )}
+                    {fitResult.infrastructure_summary && (
+                      <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/5 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-cyan-300/75">Infrastructure</p>
+                        <p className="mt-1 text-[10px] text-white/55 capitalize">
+                          Readiness {fitResult.infrastructure_summary.readiness_level} · transit {fitResult.infrastructure_summary.transit_access_level}
+                        </p>
+                        <p className="mt-1 text-[10px] text-white/45">
+                          Utilities: {fitResult.infrastructure_summary.available_utilities.join(", ") || "None mapped nearby"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
                    {fitResult.messages.map((m, i) => (
                      <p key={i} className={`text-[10px] leading-snug ${m.includes('⛔') || m.includes('CRITICAL') ? 'text-red-400' : 'text-white/50'}`}>
@@ -997,6 +1179,12 @@ export default function GisLandSelectionPage() {
 
             {fitResult?.fit_status === "valid" && (
               <div className="grid grid-cols-1 gap-2">
+                <button
+                  onClick={handleSaveAnalysisToComparison}
+                  className="text-xs px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white/75 hover:bg-white/10 transition-all font-medium uppercase tracking-wide"
+                >
+                  Save Analysis To Comparison
+                </button>
                 <button
                   onClick={handleGenerateReport}
                     disabled={generatingReport || !selectedSession}
@@ -1073,7 +1261,7 @@ export default function GisLandSelectionPage() {
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto">
-                {suggestions.length === 0 && parcels.length === 0 ? (
+                {suggestions.length === 0 && parcels.length === 0 && !historyInsights ? (
                   <div className="p-6 text-center space-y-3">
                     <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
                       <Map className="w-6 h-6 text-white/20" />
@@ -1085,6 +1273,80 @@ export default function GisLandSelectionPage() {
                   </div>
                 ) : (
                   <div className="p-3 space-y-4">
+                    {historyInsights && (
+                      <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/8 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300/75">Historical Insights</p>
+                          <span className="text-[10px] text-white/40">
+                            {loadingHistoryInsights ? "Updating..." : `${historyInsights.totalAnalyses} analyses`}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] text-white/70">
+                          <span>Valid fit rate: {historyInsights.validFitRate.toFixed(1)}%</span>
+                          <span>Avg fit: {historyInsights.averageFitScore?.toFixed(1) ?? "—"}</span>
+                          <span>Avg env: {historyInsights.averageEnvironmentalScore?.toFixed(1) ?? "—"}</span>
+                          <span>Avg infra: {historyInsights.averageInfrastructureScore?.toFixed(1) ?? "—"}</span>
+                        </div>
+                        {historyInsights.recommendedSignals.length > 0 && (
+                          <div className="space-y-1">
+                            {historyInsights.recommendedSignals.slice(0, 2).map((signal) => (
+                              <p key={signal} className="text-[10px] text-white/50 leading-snug">
+                                {signal}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {rankedParcels.length > 0 && (
+                      <div className="space-y-3 rounded-xl border border-amber-500/15 bg-amber-500/8 p-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300/75">Weighted Ranking</p>
+                          <span className="text-[10px] text-white/40">{rankedParcels.length} analyzed parcels</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(["fit", "environment", "infrastructure", "utilization"] as const).map((key) => (
+                            <label key={key} className="space-y-1">
+                              <span className="text-[10px] text-white/45 capitalize">{key}</span>
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                value={comparisonWeights[key]}
+                                onChange={(e) => {
+                                  const nextWeights = {
+                                    ...comparisonWeights,
+                                    [key]: Number(e.target.value || 0),
+                                  };
+                                  void persistComparisonWeights(nextWeights);
+                                }}
+                                className="w-full accent-amber-300"
+                              />
+                              <span className="text-[10px] text-white/30">{comparisonWeights[key]}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="space-y-2">
+                          {rankedParcels.slice(0, 3).map((parcel, index) => (
+                            <button
+                              key={parcel.id}
+                              onClick={() => mapRef.current?.dispatchMapEvent({ type: "flyTo", payload: { center: parcel.centroid, zoom: 16 } })}
+                              className="w-full rounded-lg border border-white/10 bg-white/5 p-2 text-left hover:bg-white/10 transition-all"
+                            >
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-semibold text-white/85">#{index + 1} {parcel.name}</span>
+                                <span className="text-amber-300">{parcel.compositeScore.toFixed(1)}/100</span>
+                              </div>
+                              <p className="mt-1 text-[10px] text-white/45">
+                                Fit {parcel.componentScores.fit.toFixed(0)} · Env {parcel.componentScores.environment.toFixed(0)} · Infra {parcel.componentScores.infrastructure.toFixed(0)}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Saved Parcels Section */}
                     {parcels.length > 0 && (
                       <div className="space-y-2">

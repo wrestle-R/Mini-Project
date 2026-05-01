@@ -22,16 +22,16 @@ export function ProjectTimeline({ phases }: { phases: ProjectTimelinePhase[] }) 
         <span className="text-xs uppercase tracking-[0.2em] text-white/45">Project timeline</span>
       </div>
 
-      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0b111d] p-4 md:p-5">
-        <div className="absolute inset-x-8 top-12 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
-        <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#07101a] to-[#071520] p-4 md:p-5">
+        <div className="absolute inset-x-8 top-16 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent" />
+        <div className="flex gap-4 overflow-x-auto px-2 py-6 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-white/10">
           {phases.map((phase, index) => (
             <motion.article
               key={phase.id}
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: index * 0.06 }}
-              className="relative rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.2)]"
+              className="snap-start min-w-[320px] max-w-[360px] flex-shrink-0 rounded-2xl border border-white/8 bg-white/3 p-5 shadow-[0_20px_40px_rgba(0,0,0,0.45)]"
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
@@ -41,16 +41,16 @@ export function ProjectTimeline({ phases }: { phases: ProjectTimelinePhase[] }) 
                   </div>
                   <h3 className="text-base font-semibold text-white">{phase.name}</h3>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
                   <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-white/40">
                     <Clock3 className="h-3.5 w-3.5" />
                     Duration
                   </div>
-                  <div className="text-lg font-semibold text-white">{phase.durationDays}d</div>
+                  <div className="text-lg font-semibold text-white">{Math.max(1, Math.round(phase.durationDays / 30))} mo</div>
                 </div>
               </div>
 
-              <div className="mb-3 h-2 overflow-hidden rounded-full bg-white/5">
+              <div className="mb-3 h-2 overflow-hidden rounded-full bg-white/6">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min(100, Math.max(8, phase.durationPercent))}%` }}
@@ -69,11 +69,11 @@ export function ProjectTimeline({ phases }: { phases: ProjectTimelinePhase[] }) 
                 ))}
               </ul>
 
-              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="mt-4 rounded-xl border border-white/8 bg-black/25 p-3">
                 <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Key tasks</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {phase.tasks.slice(0, 4).map((task) => (
-                    <span key={task} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/70">
+                    <span key={task} className="rounded-full border border-white/8 bg-white/5 px-3 py-1 text-[11px] text-white/70">
                       {task}
                     </span>
                   ))}

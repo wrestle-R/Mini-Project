@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
+import JSZip from "jszip";
 import dbConnect from "@/lib/db";
 import IfcSession from "@/lib/models/IfcSession";
 import GisValidationSnapshot from "@/lib/models/GisValidationSnapshot";
@@ -9,6 +10,45 @@ import { downloadGridFSFileAsBuffer } from "@/lib/ifc/gridfs";
 import { serializeIfcSession } from "@/lib/ifc/serializers";
 import { getVersionCount } from "@/lib/ifc/sessions";
 import { assertWorkflowTransition, type WorkflowState } from "@/lib/workflow/states";
+
+function buildStakeholderSummary(params: {
+  sessionTitle: string;
+  reportVersion: number;
+  fitResult: Record<string, unknown>;
+  reportPayload: Record<string, unknown>;
+  parcelSummary: { areaSqm?: number | null; centroid?: number[] } | null;
+}) {
+  const fitResult = params.fitResult || {};
+  const reportPayload = params.reportPayload || {};
+  const fitSummary = (reportPayload.fitSummary || {}) as Record<string, unknown>;
+  const timeEstimate = (reportPayload.timeEstimate || {}) as Record<string, unknown>;
+  const workforceEstimate = (reportPayload.workforceEstimate || {}) as Record<string, unknown>;
+  const costEstimate = (reportPayload.costEstimate || {}) as Record<string, unknown>;
+  const environmental = (fitSummary.environmentalSummary || fitResult.environmental_summary || {}) as Record<string, unknown>;
+  const infrastructure = (fitSummary.infrastructureSummary || fitResult.infrastructure_summary || {}) as Record<string, unknown>;
+  const centroid = params.parcelSummary?.centroid || [];
+
+  return [
+    `# GIS Stakeholder Brief`,
+    ``,
+    `Project: ${params.sessionTitle}`,
+    `Report version: ${params.reportVersion}`,
+    `Fit status: ${String(fitSummary.fitStatus || fitResult.fit_status || "unknown")}`,
+    `Fit score: ${String(fitSummary.fitScore ?? fitResult.fit_score ?? "n/a")}`,
+    `Parcel area (sqm): ${String(params.parcelSummary?.areaSqm ?? fitResult.land_area_sqm ?? "n/a")}`,
+    `Parcel centroid: ${centroid.length === 2 ? `${centroid[1]}, ${centroid[0]}` : "n/a"}`,
+    `Estimated duration (days): ${String(timeEstimate.estimatedDurationDays ?? "n/a")}`,
+    `Recommended workers: ${String(workforceEstimate.totalRecommendedWorkers ?? "n/a")}`,
+    `Estimated budget: ${String(costEstimate.totalBudget ?? "n/a")}`,
+    `Environmental suitability: ${String(environmental.suitability_score ?? "n/a")}`,
+    `Flood risk: ${String(environmental.flood_risk_level ?? "n/a")}`,
+    `Infrastructure readiness: ${String(infrastructure.readiness_score ?? "n/a")}`,
+    `Utility coverage: ${String(infrastructure.utility_coverage_level ?? "n/a")}`,
+    ``,
+    `Key messages:`,
+    ...(((fitResult.messages as unknown[]) || []).slice(0, 6).map((message) => `- ${String(message)}`)),
+  ].join("\n");
+}
 
 export async function GET(req: Request) {
   try {
@@ -48,6 +88,66 @@ export async function GET(req: Request) {
       contractorId: new mongoose.Types.ObjectId(contractorId),
       sessionId: session._id,
     });
+
+    const format = url.searchParams.get("format");
+    if (format === "bundle") {
+      const zip = new JSZip();
+      const payload = report.report as Record<string, unknown>;
+      const snapshot = validationSnapshot
+        ? {
+            id: validationSnapshot._id.toString(),
+            status: validationSnapshot.status,
+            completedAt: validationSnapshot.completedAt,
+            fitResult: validationSnapshot.fitResult,
+            parcelSummary: validationSnapshot.parcelSummary,
+            modelDimensions: validationSnapshot.modelDimensions,
+          }
+        : null;
+
+      zip.file(
+        "stakeholder-summary.md",
+        buildStakeholderSummary({
+          sessionTitle: session.title,
+          reportVersion: report.versionNumber,
+          fitResult: (snapshot?.fitResult || {}) as Record<string, unknown>,
+          reportPayload: payload,
+          parcelSummary: snapshot?.parcelSummary || null,
+        })
+      );
+      zip.file(
+        "report.json",
+        JSON.stringify(
+          {
+            report: {
+              id: report._id.toString(),
+              versionNumber: report.versionNumber,
+              status: report.status,
+              generatedAt: report.generatedAt,
+              payload,
+            },
+            session: serializeIfcSession(session, await getVersionCount(session._id.toString())),
+            validationSnapshot: snapshot,
+          },
+          null,
+          2
+        )
+      );
+      if (validationSnapshot?.parcelGeojson) {
+        zip.file("parcel.geojson", JSON.stringify(validationSnapshot.parcelGeojson, null, 2));
+      }
+      if (validationSnapshot?.fitResult) {
+        zip.file("fit-validation.json", JSON.stringify(validationSnapshot.fitResult, null, 2));
+      }
+
+const buffer = await zip.generateAsync({ type: "nodebuffer" });
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="gis-report-bundle-${session._id.toString()}.zip"`,
+        },
+      });
+    }
 
     return NextResponse.json({
       report: {
