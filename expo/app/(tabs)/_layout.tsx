@@ -1,5 +1,5 @@
 import { Redirect, Tabs } from 'expo-router';
-import { BriefcaseIcon, CalendarDaysIcon, LayoutGridIcon, UserRoundIcon } from 'lucide-react-native';
+import { BriefcaseIcon, FileTextIcon, LayoutGridIcon, UserRoundIcon } from 'lucide-react-native';
 
 import { Icon } from '@/components/ui/icon';
 import { useWorkerSession } from '@/contexts/worker-session-context';
@@ -43,10 +43,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="attendance"
+        name="daily-reports"
         options={{
-          title: 'Attendance',
-          tabBarIcon: ({ color, size }) => <Icon as={CalendarDaysIcon} color={color} size={size} />,
+          title: 'Reports',
+          tabBarIcon: ({ color, size }) => <Icon as={FileTextIcon} color={color} size={size} />,
         }}
       />
       <Tabs.Screen

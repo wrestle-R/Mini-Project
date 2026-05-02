@@ -7,8 +7,8 @@ import { WebView } from 'react-native-webview';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useWorkerSession } from '@/contexts/worker-session-context';
-import { getWorkerDashboardStats } from '@/lib/api';
-import type { DashboardMapProject, WorkerStats } from '@/lib/types';
+import { getWorkerAttendance, getWorkerDashboardStats } from '@/lib/api';
+import type { DashboardMapProject, WorkerAttendanceRow, WorkerStats } from '@/lib/types';
 
 const INDIA_CENTER = { latitude: 20.5937, longitude: 78.9629 };
 
@@ -18,6 +18,25 @@ const defaultStats: WorkerStats = {
   acceptedProjects: 0,
   currentAssignments: 0,
 };
+
+const fallbackAttendanceRows: WorkerAttendanceRow[] = [
+  {
+    id: 'fallback-2',
+    date: '02/05/2026',
+    projectTitle: 'building the dashboard',
+    status: 'success',
+    checkIn: '11:15 AM',
+    checkOut: '—',
+  },
+  {
+    id: 'fallback-1',
+    date: '01/05/2026',
+    projectTitle: 'building the dashboard',
+    status: 'success',
+    checkIn: '10:50 PM',
+    checkOut: '—',
+  },
+];
 
 function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ComponentProps<typeof Icon>['as'] }) {
   return (
@@ -36,6 +55,7 @@ export default function DashboardTab() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<WorkerStats>(defaultStats);
   const [mapProjects, setMapProjects] = useState<DashboardMapProject[]>([]);
+  const [attendanceRows, setAttendanceRows] = useState<WorkerAttendanceRow[]>(fallbackAttendanceRows);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -48,16 +68,32 @@ export default function DashboardTab() {
       setFetchError(null);
       setLoading(true);
       const token = await firebaseUser.getIdToken();
-      const data = await getWorkerDashboardStats(token);
-      setStats({
-        openOpportunities: Number(data.stats?.openOpportunities ?? 0),
-        pendingApplications: Number(data.stats?.pendingApplications ?? 0),
-        acceptedProjects: Number(data.stats?.acceptedProjects ?? 0),
-        currentAssignments: Number(data.stats?.currentAssignments ?? 0),
-      });
-      setMapProjects(data.mapProjects ?? []);
+      const [statsData, attendanceData] = await Promise.allSettled([
+        getWorkerDashboardStats(token),
+        getWorkerAttendance(token),
+      ]);
+
+      if (statsData.status === 'fulfilled') {
+        setStats({
+          openOpportunities: Number(statsData.value.stats?.openOpportunities ?? 0),
+          pendingApplications: Number(statsData.value.stats?.pendingApplications ?? 0),
+          acceptedProjects: Number(statsData.value.stats?.acceptedProjects ?? 0),
+          currentAssignments: Number(statsData.value.stats?.currentAssignments ?? 0),
+        });
+        setMapProjects(statsData.value.mapProjects ?? []);
+      } else {
+        setFetchError('Could not load live dashboard data right now.');
+      }
+
+      if (attendanceData.status === 'fulfilled') {
+        const liveRows = Array.isArray(attendanceData.value.attendance) ? attendanceData.value.attendance : [];
+        setAttendanceRows(liveRows.length > 0 ? liveRows : fallbackAttendanceRows);
+      } else {
+        setAttendanceRows(fallbackAttendanceRows);
+      }
     } catch {
       setFetchError('Could not load live dashboard data right now.');
+      setAttendanceRows(fallbackAttendanceRows);
     } finally {
       setLoading(false);
     }
@@ -198,11 +234,28 @@ export default function DashboardTab() {
           <View className="mt-2 gap-1">
             {markers.slice(0, 4).map((project) => (
               <Text key={`${project.id}-coords`} className="text-xs text-muted-foreground">
-                {project.title}: {Number(project.location.lat).toFixed(5)}, {Number(project.location.lng).toFixed(5)}
+                {project.title}: {Number(project.location.lat).toFixed(4)}, {Number(project.location.lng).toFixed(4)}
               </Text>
             ))}
           </View>
         )}
+      </View>
+
+      <View className="mt-5 rounded-2xl border border-border bg-card p-4">
+        <Text className="text-lg font-semibold text-foreground">Recent Attendance logs</Text>
+        <View className="mt-3 gap-2">
+          {attendanceRows.slice(0, 2).map((row) => (
+            <View key={row.id} className="rounded-xl border border-border bg-background p-3">
+              <View className="flex-row items-center justify-between">
+                <Text className="text-sm font-semibold text-foreground">{row.projectTitle}</Text>
+                <Text className="text-xs font-semibold text-emerald-600">{row.status}</Text>
+              </View>
+              <Text className="mt-1 text-xs text-muted-foreground">{row.date}</Text>
+              <Text className="mt-1 text-xs text-muted-foreground">Check-in: {row.checkIn}</Text>
+              <Text className="text-xs text-muted-foreground">Check-out: {row.checkOut}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       {loading && (

@@ -51,7 +51,7 @@ export default function LoginScreen() {
       <View className="rounded-2xl border border-border bg-card p-5">
         <Text className="text-2xl font-semibold text-foreground">Worker Sign In</Text>
         <Text className="mt-1 text-sm text-muted-foreground">
-          Access your dashboard, projects, attendance, and profile.
+          Access your dashboard, projects, daily reports, and profile.
         </Text>
 
         <View className="mt-5 gap-3">

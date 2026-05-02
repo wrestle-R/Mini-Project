@@ -3,6 +3,8 @@ import type {
   DashboardStatsResponse,
   WorkerProjectsResponse,
   WorkerSession,
+  WorkerDailyReportsResponse,
+  CreateDailyReportPayload,
 } from '@/lib/types';
 
 const API_BASE_URL = 'https://buildsync-crce.vercel.app';
@@ -101,6 +103,18 @@ export function updateWorkerProfileBasic(
 
 export function getWorkerProfileExtended(token: string) {
   return request<Record<string, unknown>>('/api/profile/extended', { token });
+}
+
+export function getWorkerDailyReports(token: string) {
+  return request<WorkerDailyReportsResponse>('/api/daily-reports', { token });
+}
+
+export function createWorkerDailyReport(token: string, payload: CreateDailyReportPayload) {
+  return request<{ report: { id: string } }>('/api/daily-reports', {
+    method: 'POST',
+    token,
+    body: payload as unknown as Record<string, unknown>,
+  });
 }
 
 export { ApiError, API_BASE_URL };

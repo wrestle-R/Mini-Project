@@ -79,3 +79,34 @@ export type MinimalWorkerProfile = {
 export type MobileThemePreference = 'system' | 'light' | 'dark';
 
 export type LanguagePreference = 'en' | 'hi' | 'mr';
+
+export type WorkerDailyReport = {
+  id: string;
+  project: { id: string; title: string; status: string } | null;
+  requesterName: string;
+  requesterRole: string;
+  reportDate: string;
+  workSummary: string;
+  manpowerCount: number;
+  materialsUsed: string;
+  blockers: string;
+  nextDayPlan: string;
+  notes: string;
+  createdAt: string;
+};
+
+export type WorkerDailyReportsResponse = {
+  reports: WorkerDailyReport[];
+  projects: { id: string; title: string; status: string }[];
+};
+
+export type CreateDailyReportPayload = {
+  projectId: string;
+  reportDate: string;
+  workSummary: string;
+  manpowerCount: string;
+  materialsUsed: string;
+  blockers: string;
+  nextDayPlan: string;
+  notes: string;
+};

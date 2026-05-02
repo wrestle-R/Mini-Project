@@ -8,6 +8,7 @@
     "build": "next build",
     "check:clean-build": "node scripts/stop-next-dev.js && node scripts/clean-next-cache.js && next build",
     "start": "next start",
+    "prod": "next build && next start",
     "lint": "eslint .",
     "migrate:project-location": "node scripts/migrate-project-location-to-geo.js",
     "seed:demo": "node scripts/seed-buildsync-demo.js"
