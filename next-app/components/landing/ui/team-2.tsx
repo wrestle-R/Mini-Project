@@ -31,7 +31,7 @@ export default function Team() {
             <div className="mx-auto max-w-5xl px-6">
                 <div className="space-y-4">
                     <h2 className="text-balance text-4xl font-medium">Meet the team</h2>
-                    <p className="text-muted-foreground text-balance">A passionate group of engineers and builders who understand construction—because we built BuildSync to solve real problems.</p>
+                    <p className="text-muted-foreground text-balance">A passionate group of engineers and builders who understand construction—because we built InfraSaathi to solve real problems.</p>
                 </div>
                 <div className="@xl:grid-cols-4 @xl:gap-6 mt-12 grid grid-cols-2 gap-4 gap-y-6 text-sm">
                     {members.map((member, index) => (

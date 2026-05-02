@@ -23,8 +23,8 @@ export default function Footer() {
                         href="/"
                         aria-label="go home"
                         className="flex items-center gap-0.5">
-                        <span className="text-base font-bold text-primary">Build</span>
-                        <span className="text-base font-bold text-foreground">Sync</span>
+                        <span className="text-base font-bold text-primary">Infra</span>
+                        <span className="text-base font-bold text-foreground">Saathi</span>
                     </Link>
                     <p className="text-muted-foreground mt-3 max-w-xs text-sm">Construction operations, unified and visible from first pour to final handover.</p>
                     <nav className="my-8 flex flex-wrap gap-x-8 gap-y-2">
@@ -39,7 +39,7 @@ export default function Footer() {
                     </nav>
 
                     <p className="text-muted-foreground mt-2 border-t pt-6 text-sm">
-                        &copy; {mounted ? new Date().getFullYear() : 2026} BuildSync. All rights reserved.
+                        &copy; {mounted ? new Date().getFullYear() : 2026} InfraSaathi. All rights reserved.
                     </p>
                 </div>
             </div>

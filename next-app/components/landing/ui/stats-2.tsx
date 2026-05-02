@@ -60,7 +60,7 @@ export default function Stats() {
             </p>
             <h2 className={headingClass}>Construction leaders stay ahead with measurable outcomes.</h2>
             <p className="max-w-xl text-balance text-lg text-muted-foreground">
-              BuildSync turns field activity into clear metrics, closing the gap between what was planned
+              InfraSaathi turns field activity into clear metrics, closing the gap between what was planned
               and what actually happened on site.
             </p>
           </motion.div>

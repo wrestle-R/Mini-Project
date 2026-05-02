@@ -69,7 +69,7 @@ export default function HeroSection() {
               variants={itemVariants}
               className="mt-5 max-w-xl text-balance text-lg text-muted-foreground"
             >
-              BuildSync unifies attendance, compliance, and project delivery into a single control
+              InfraSaathi unifies attendance, compliance, and project delivery into a single control
               plane. See work progress in real time and keep every handoff accountable.
             </motion.p>
 

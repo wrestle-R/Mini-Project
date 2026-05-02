@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "GIS Land Selection · BuildSync",
+  title: "GIS Land Selection · InfraSaathi",
   description:
     "AI-powered geospatial land selection for India. Navigate by natural language, draw polygons, and get ranked land recommendations powered by OSM and spatial intelligence.",
 };

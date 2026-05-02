@@ -47,7 +47,7 @@ export default function Testimonials() {
                         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">Customer voice</p>
                         <h2 className={headingClass}>Teams move faster when every update is trusted.</h2>
                         <p className="max-w-xl text-balance text-lg text-muted-foreground">
-                            BuildSync aligns office leadership and field crews with the same real-time truth.
+                            InfraSaathi aligns office leadership and field crews with the same real-time truth.
                         </p>
                     </motion.div>
 

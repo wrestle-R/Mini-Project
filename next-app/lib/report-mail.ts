@@ -60,18 +60,18 @@ export async function sendReportTestMail(companyName: string) {
   const sentAt = new Date();
 
   await transport.sendMail({
-    from: `"BuildSync Reports" <${config.from}>`,
+    from: `"InfraSaathi Reports" <${config.from}>`,
     to: config.testTo,
-    subject: "BuildSync report mail test",
+    subject: "InfraSaathi report mail test",
     text: [
-      "BuildSync report mail is configured correctly.",
+      "InfraSaathi report mail is configured correctly.",
       `Company: ${companyName || "Company"}`,
       `Sent at: ${sentAt.toISOString()}`,
     ].join("\n"),
     html: `
       <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
-        <h2 style="margin:0 0 12px">BuildSync report mail test</h2>
-        <p>BuildSync report mail is configured correctly.</p>
+        <h2 style="margin:0 0 12px">InfraSaathi report mail test</h2>
+        <p>InfraSaathi report mail is configured correctly.</p>
         <p><strong>Company:</strong> ${companyName || "Company"}</p>
         <p><strong>Sent at:</strong> ${sentAt.toISOString()}</p>
       </div>
@@ -101,7 +101,7 @@ export async function sendWeeklyProjectReportMail({
   const sentAt = new Date();
 
   await transport.sendMail({
-    from: `"BuildSync Reports" <${config.from}>`,
+    from: `"InfraSaathi Reports" <${config.from}>`,
     to: recipients,
     subject: `Weekly progress report - ${projectTitle}`,
     text: [

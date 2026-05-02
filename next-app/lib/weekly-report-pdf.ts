@@ -30,7 +30,7 @@ export async function generateWeeklyReportPdf(input: WeeklyReportInput) {
     0
   );
   const lines = [
-    "BuildSync Weekly Project Report",
+    "InfraSaathi Weekly Project Report",
     `Company: ${input.companyName}`,
     `Project: ${input.projectTitle}`,
     `Period: ${input.periodLabel}`,
@@ -97,7 +97,7 @@ function buildSimplePdf(lines: string[]) {
   for (let index = 0; index < lines.length; index += pageLineCount) {
     pages.push(lines.slice(index, index + pageLineCount));
   }
-  if (pages.length === 0) pages.push(["BuildSync Weekly Project Report"]);
+  if (pages.length === 0) pages.push(["InfraSaathi Weekly Project Report"]);
 
   const objects: string[] = [];
   const addObject = (body: string) => {

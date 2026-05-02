@@ -54,11 +54,11 @@ export function ContractorSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="BuildSync">
+            <SidebarMenuButton size="lg" asChild tooltip="InfraSaathi">
               <Link href="/contractor/dashboard">
                 <Building2 className="h-6 w-6 text-primary shrink-0" />
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">BuildSync</span>
+                  <span className="font-semibold">InfraSaathi</span>
                   <span className="text-xs text-muted-foreground">
                     Contractor
                   </span>

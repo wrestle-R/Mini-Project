@@ -10,8 +10,8 @@ const headingClass = 'text-balance text-4xl font-semibold md:text-5xl'
 const faqItems = [
     {
         id: 'item-1',
-        question: 'Who is BuildSync built for?',
-        answer: 'BuildSync supports owners, contractors, and field teams. It scales from small crews to multi-site programs without changing the workflow.',
+        question: 'Who is InfraSaathi built for?',
+        answer: 'InfraSaathi supports owners, contractors, and field teams. It scales from small crews to multi-site programs without changing the workflow.',
     },
     {
         id: 'item-2',
@@ -26,7 +26,7 @@ const faqItems = [
     {
         id: 'item-4',
         question: 'What about IFC and BIM workflows?',
-        answer: 'BuildSync connects IFC models to task and material status so delays surface early and can be resolved before they cascade.',
+        answer: 'InfraSaathi connects IFC models to task and material status so delays surface early and can be resolved before they cascade.',
     },
     {
         id: 'item-5',
@@ -55,13 +55,13 @@ export default function FAQs() {
                         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">Answers</p>
                         <h2 className={headingClass}>Everything your team needs to know before kickoff.</h2>
                         <p className="max-w-xl text-balance text-lg text-muted-foreground">
-                            From security to workflow coverage, BuildSync is built to match how modern construction teams
+                            From security to workflow coverage, InfraSaathi is built to match how modern construction teams
                             operate.
                         </p>
                         <p className="text-sm text-muted-foreground">
                             Still have questions?{' '}
                             <Link href="/signup" className="font-semibold text-primary hover:underline">
-                                Talk to the BuildSync team
+                                Talk to the InfraSaathi team
                             </Link>
                         </p>
                     </motion.div>

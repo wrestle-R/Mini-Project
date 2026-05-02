@@ -16,9 +16,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "BuildSync - Construction Field Management",
+  title: "InfraSaathi - Construction Field Management",
   description:
-    "Digitize your construction site operations with BuildSync. Manage projects, tasks, DPRs, attendance, materials, and invoicing in one platform.",
+    "Digitize your construction site operations with InfraSaathi. Manage projects, tasks, DPRs, attendance, materials, and invoicing in one platform.",
 };
 
 export default function RootLayout({
