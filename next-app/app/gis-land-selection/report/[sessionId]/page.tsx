@@ -20,6 +20,7 @@ import {
   FiActivity as Sparkles,
   FiRefreshCw as TimerReset,
   FiUsers as Users,
+  FiCheckSquare as CheckSquare,
 } from "react-icons/fi";
 import { ProjectTimeline, type ProjectTimelinePhase } from "@/components/gis/project-timeline";
 import { PhaseWorkforceGrid, type PhaseWorkforce } from "@/components/gis/phase-workforce-grid";
@@ -195,7 +196,7 @@ type ReportResponse = {
 };
 
 
-type ReportTab = "overview" | "timeline" | "materials" | "workforce" | "financial";
+type ReportTab = "overview" | "timeline" | "materials" | "workforce" | "financial" | "validation";
 
 const REPORT_TABS: { id: ReportTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "overview", label: "Overview", icon: FileText },
@@ -203,6 +204,7 @@ const REPORT_TABS: { id: ReportTab; label: string; icon: React.ComponentType<{ c
   { id: "materials", label: "Materials", icon: Layers3 },
   { id: "workforce", label: "Workforce", icon: Users },
   { id: "financial", label: "Financials", icon: Building2 },
+  { id: "validation", label: "Validation", icon: CheckSquare },
 ];
 
 function formatNumber(value: number | null | undefined, fractionDigits = 2) {
@@ -999,6 +1001,111 @@ export default function GisReportPage() {
                   </div>
                 </div>
               </SectionCard>
+            </div>
+          )}
+
+          {activeTab === "validation" && data.validationSnapshot && (
+            <div className="space-y-6">
+              <SectionCard title="Validation Results" icon={<CheckSquare className="h-4 w-4" />}>
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Validation Status</p>
+                      <p className="mt-2 text-xl font-semibold capitalize text-white">{data.validationSnapshot.status}</p>
+                      <p className="mt-1 text-xs text-white/55">{data.validationSnapshot.id}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Completed At</p>
+                      <p className="mt-2 text-sm text-white/80">{new Date(data.validationSnapshot.completedAt).toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Parcel Area</p>
+                      <p className="mt-2 text-xl font-semibold text-white">
+                        {data.validationSnapshot.parcelSummary.areaSqm ? formatNumber(data.validationSnapshot.parcelSummary.areaSqm) : "—"} sqm
+                      </p>
+                    </div>
+                  </div>
+
+                  {data.validationSnapshot.modelDimensions && (
+                    <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-cyan-200/70">Model Dimensions</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-4">
+                        <div>
+                          <p className="text-[11px] text-cyan-200/50">Width</p>
+                          <p className="mt-1 text-lg font-semibold text-cyan-100">{formatNumber(data.validationSnapshot.modelDimensions.width_m)} m</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-cyan-200/50">Depth</p>
+                          <p className="mt-1 text-lg font-semibold text-cyan-100">{formatNumber(data.validationSnapshot.modelDimensions.depth_m)} m</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-cyan-200/50">Height</p>
+                          <p className="mt-1 text-lg font-semibold text-cyan-100">{formatNumber(data.validationSnapshot.modelDimensions.height_m)} m</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-cyan-200/50">Up Axis</p>
+                          <p className="mt-1 text-lg font-semibold text-cyan-100">{data.validationSnapshot.modelDimensions.up_axis || "Y"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Fit Result Details</p>
+                    <div className="mt-4 overflow-auto max-h-[400px] rounded-xl border border-white/10 bg-black/20">
+                      <pre className="p-4 text-[11px] text-white/70 font-mono overflow-auto whitespace-pre-wrap break-words">
+                        {JSON.stringify(data.validationSnapshot.fitResult, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+
+                  {data.validationSnapshot.parcelSummary.centroid && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/40">Parcel Location</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div>
+                          <p className="text-[11px] text-white/50">Latitude</p>
+                          <p className="mt-1 font-semibold text-white/80 font-mono text-sm">{formatNumber(data.validationSnapshot.parcelSummary.centroid[1], 6)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-white/50">Longitude</p>
+                          <p className="mt-1 font-semibold text-white/80 font-mono text-sm">{formatNumber(data.validationSnapshot.parcelSummary.centroid[0], 6)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Validation Summary" icon={<ShieldAlert className="h-4 w-4" />}>
+                <div className="space-y-4 text-sm text-white/75">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Report Generation Info</p>
+                    <div className="mt-3 grid gap-2">
+                      <div className="flex justify-between py-1 border-b border-white/10">
+                        <span className="text-white/50">IFC Session ID:</span>
+                        <span className="text-white/80 font-mono text-xs">{payload.generatedFrom.ifcSessionId}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-white/10">
+                        <span className="text-white/50">IFC Version:</span>
+                        <span className="text-white/80 font-mono">{payload.generatedFrom.ifcVersionNumber}</span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-white/50">Validation Snapshot ID:</span>
+                        <span className="text-white/80 font-mono text-xs">{payload.generatedFrom.validationSnapshotId}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
+          )}
+
+          {activeTab === "validation" && !data.validationSnapshot && (
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-8 text-center">
+              <ShieldAlert className="h-12 w-12 text-amber-300 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-amber-100">No Validation Data</h3>
+              <p className="mt-2 text-sm text-amber-100/70">The validation snapshot for this report was not available or has been removed.</p>
             </div>
           )}
         </motion.div>

@@ -22,9 +22,7 @@ const INDIA_BOUNDS: maplibregl.LngLatBoundsLike = [68.0, 6.0, 97.5, 37.5];
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? "";
 
 const MAP_STYLES = {
-  hybrid: `https://api.maptiler.com/maps/hybrid/style.json?key=${MAPTILER_KEY}`,
   streets: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`,
-  satellite: `https://api.maptiler.com/maps/satellite/style.json?key=${MAPTILER_KEY}`,
 };
 type MapStyleKey = keyof typeof MAP_STYLES;
 
@@ -212,7 +210,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
   const renderFrameCountRef = useRef(0);
   const modelLoadCompleteRef = useRef(false);
 
-  const [currentStyle, setCurrentStyle] = useState<MapStyleKey>("hybrid");
+  const [currentStyle, setCurrentStyle] = useState<MapStyleKey>("streets");
   const [polygonArea, setPolygonArea] = useState<number | null>(null);
   const [modelSelected, setModelSelected] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -255,7 +253,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: `https://api.maptiler.com/maps/hybrid/style.json?key=${MAPTILER_KEY}`,
+      style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`,
       center: INDIA_CENTER,
       zoom: 5,
       pitch: 30,
@@ -1309,21 +1307,7 @@ const GisMap = forwardRef<GisMapHandle, GisMapProps>(function GisMap(
       
       {/* Map UI Overlay */}
       <div className="absolute top-4 left-14 z-10 flex flex-col gap-2">
-        <div className="bg-background/90 backdrop-blur border border-border shadow-md rounded-md p-1.5 flex gap-1">
-          {(Object.keys(MAP_STYLES) as MapStyleKey[]).map((styleId) => (
-            <button
-              key={styleId}
-              onClick={() => handleStyleChange(styleId)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-sm transition-colors capitalize ${
-                currentStyle === styleId 
-                  ? "bg-primary text-primary-foreground shadow-sm" 
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              {styleId}
-            </button>
-          ))}
-        </div>
+        {/* Map style selector hidden since only one style available */}
         
         {polygonArea !== null && (
           <div className="bg-background/90 backdrop-blur border border-border shadow-md rounded-md p-3 max-w-[200px]">
