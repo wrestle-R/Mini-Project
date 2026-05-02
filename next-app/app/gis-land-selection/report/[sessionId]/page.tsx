@@ -259,7 +259,7 @@ function ReportLoadingState() {
       <div className="relative mx-auto flex min-h-screen max-w-6xl items-center px-6 py-14">
         <div className="grid w-full gap-8 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-200/80">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-200/80">
               <Sparkles className="h-3.5 w-3.5" />
               Generating project report
             </div>
@@ -267,7 +267,7 @@ function ReportLoadingState() {
               <h1 className="max-w-2xl text-4xl font-semibold leading-tight md:text-6xl">
                 The workflow is planning your project in phases.
               </h1>
-              <p className="mt-4 max-w-xl text-base leading-7 text-white/60 md:text-lg">
+              <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
                 Timeline, materials, and workforce are being assembled synchronously. The report will include animated phase planning and a phase-wise labor breakdown.
               </p>
             </div>
@@ -279,13 +279,13 @@ function ReportLoadingState() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: index * 0.12 }}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                  className="rounded-2xl border border-border bg-muted/30 p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-white/90">{step.label}</p>
+                    <p className="text-sm font-medium text-muted-foreground">{step.label}</p>
                     <TimerReset className="h-4 w-4 text-cyan-300" />
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted/30">
                     <motion.div
                       initial={{ x: "-35%" }}
                       animate={{ x: ["-35%", "110%"] }}
@@ -298,7 +298,7 @@ function ReportLoadingState() {
             </div>
           </div>
 
-          <div className="relative rounded-[2rem] border border-white/10 bg-[#0a111e]/90 p-5 shadow-[0_16px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="relative rounded-[2rem] border border-border bg-card p-5 shadow-sm">
             <div className="absolute inset-x-10 top-10 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
             <div className="absolute inset-y-10 left-10 w-px bg-gradient-to-b from-transparent via-emerald-400/25 to-transparent" />
             <div className="grid gap-3">
@@ -308,19 +308,19 @@ function ReportLoadingState() {
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3, delay: index * 0.15 }}
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                  className="rounded-2xl border border-border bg-card p-4"
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-white/40">Stage {index + 1}</p>
-                      <p className="mt-1 text-base font-semibold text-white">{step.label}</p>
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Stage {index + 1}</p>
+                      <p className="mt-1 text-base font-semibold text-foreground">{step.label}</p>
                     </div>
-                    <div className="h-10 w-10 rounded-2xl border border-white/10 bg-white/5" />
+                    <div className="h-10 w-10 rounded-2xl border border-border bg-muted/30" />
                   </div>
-                  <div className="mt-4 flex items-center gap-2 text-xs text-white/45">
-                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Planning</span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Materials</span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Crew</span>
+                  <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="rounded-full border border-border bg-muted/30 px-2.5 py-1">Planning</span>
+                    <span className="rounded-full border border-border bg-muted/30 px-2.5 py-1">Materials</span>
+                    <span className="rounded-full border border-border bg-muted/30 px-2.5 py-1">Crew</span>
                   </div>
                 </motion.div>
               ))}
@@ -411,17 +411,17 @@ export default function GisReportPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#060910] text-white">
+      <div className="min-h-screen bg-background text-foreground">
         <div className="mx-auto max-w-3xl px-6 py-16">
           <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-8">
             <div className="flex items-center gap-3 text-red-200">
               <ShieldAlert className="h-5 w-5" />
               <h1 className="text-xl font-semibold">Report unavailable</h1>
             </div>
-            <p className="mt-3 text-sm text-white/70">{error}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{error}</p>
             <button
               onClick={() => router.back()}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground hover:bg-muted/50"
             >
               <ArrowLeft className="h-4 w-4" />
               Go back
@@ -447,7 +447,7 @@ export default function GisReportPage() {
               Detailed Construction Report
             </div>
             <h1 className="mt-1 text-2xl font-semibold">{data.session.title}</h1>
-            <p className="mt-1 text-sm text-white/45">
+            <p className="mt-1 text-sm text-muted-foreground">
               Session {data.session.id} · Workflow {data.session.workflowState} · Version {data.report.versionNumber}
             </p>
           </div>
@@ -455,7 +455,7 @@ export default function GisReportPage() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => router.back()}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground hover:bg-muted/50"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to GIS
@@ -487,7 +487,7 @@ export default function GisReportPage() {
                 a.click();
                 URL.revokeObjectURL(url);
               }}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground hover:bg-muted/50"
             >
               <Download className="h-4 w-4" />
               JSON
@@ -524,16 +524,16 @@ export default function GisReportPage() {
               <CheckCircle2 className="h-4 w-4" />
               Fit status
             </div>
-            <p className="mt-3 text-2xl font-semibold capitalize text-white">{fitSummary.fitStatus || "unknown"}</p>
-            <p className="mt-1 text-sm text-white/55">Fit score {formatNumber(fitSummary.fitScore, 1)}%</p>
+            <p className="mt-3 text-2xl font-semibold capitalize text-foreground">{fitSummary.fitStatus || "unknown"}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Fit score {formatNumber(fitSummary.fitScore, 1)}%</p>
           </div>
           <div className="rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-5 shadow-[0_16px_48px_rgba(34,211,238,0.08)]">
             <div className="flex items-center gap-2 text-cyan-300">
               <Layers3 className="h-4 w-4" />
               Materials
             </div>
-            <p className="mt-3 text-2xl font-semibold text-white">{payload.materialTotals.totalElements}</p>
-            <p className="mt-1 text-sm text-white/55">
+            <p className="mt-3 text-2xl font-semibold text-foreground">{payload.materialTotals.totalElements}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
               qty range {formatNumber(payload.materialTotals.totalQuantityRange.min)} - {formatNumber(payload.materialTotals.totalQuantityRange.max)}
             </p>
           </div>
@@ -542,20 +542,20 @@ export default function GisReportPage() {
               <CalendarDays className="h-4 w-4" />
               Estimated days
             </div>
-            <p className="mt-3 text-2xl font-semibold text-white">
+            <p className="mt-3 text-2xl font-semibold text-foreground">
               {payload.timeEstimate.durationRangeDays.min} - {payload.timeEstimate.durationRangeDays.max}
             </p>
-            <p className="mt-1 text-sm text-white/55">midline {payload.timeEstimate.estimatedDurationDays} days</p>
+            <p className="mt-1 text-sm text-muted-foreground">midline {payload.timeEstimate.estimatedDurationDays} days</p>
           </div>
           <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 shadow-[0_16px_48px_rgba(245,158,11,0.08)]">
             <div className="flex items-center gap-2 text-amber-300">
               <Users className="h-4 w-4" />
               Recommended crew
             </div>
-            <p className="mt-3 text-2xl font-semibold text-white">
+            <p className="mt-3 text-2xl font-semibold text-foreground">
               {payload.workforceEstimate.totalWorkerRange.min} - {payload.workforceEstimate.totalWorkerRange.max}
             </p>
-            <p className="mt-1 text-sm text-white/55">midline {totalWorkers}, peak {payload.workforceEstimate.peakCrewSize}</p>
+            <p className="mt-1 text-sm text-muted-foreground">midline {totalWorkers}, peak {payload.workforceEstimate.peakCrewSize}</p>
           </div>
         </div>
 
@@ -567,16 +567,16 @@ export default function GisReportPage() {
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                     <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Suitability</p>
                     <p className="mt-2 text-2xl font-semibold">{formatNumber(fitSummary.environmentalSummary.suitability_score, 1)}/100</p>
-                    <p className="mt-1 text-sm text-white/60 capitalize">
+                    <p className="mt-1 text-sm text-muted-foreground capitalize">
                       sensitivity {fitSummary.environmentalSummary.sensitivity_level} · flood {fitSummary.environmentalSummary.flood_risk_level}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Mapped context</p>
-                    <p className="mt-2 text-sm text-white/75">
+                  <div className="rounded-xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Mapped context</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
                       {fitSummary.environmentalSummary.nearby_features.join(", ") || "No dominant ecological feature detected"}
                     </p>
-                    <p className="mt-2 text-sm text-white/55">
+                    <p className="mt-2 text-sm text-muted-foreground">
                       Natural cover ratio {formatNumber(fitSummary.environmentalSummary.metrics.natural_cover_ratio * 100, 1)}%
                     </p>
                   </div>
@@ -600,24 +600,24 @@ export default function GisReportPage() {
                   <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
                     <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Readiness</p>
                     <p className="mt-2 text-2xl font-semibold">{formatNumber(fitSummary.infrastructureSummary.readiness_score, 1)}/100</p>
-                    <p className="mt-1 text-sm text-white/60 capitalize">
+                    <p className="mt-1 text-sm text-muted-foreground capitalize">
                       utilities {fitSummary.infrastructureSummary.utility_coverage_level} · transit {fitSummary.infrastructureSummary.transit_access_level}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Available utilities</p>
-                    <p className="mt-2 text-sm text-white/75">
+                  <div className="rounded-xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Available utilities</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
                       {fitSummary.infrastructureSummary.available_utilities.join(", ") || "No mapped utility corridor nearby"}
                     </p>
-                    <p className="mt-2 text-sm text-white/55">
+                    <p className="mt-2 text-sm text-muted-foreground">
                       Missing: {fitSummary.infrastructureSummary.missing_utilities.join(", ") || "None"}
                     </p>
                   </div>
                 </div>
                 {!!fitSummary.infrastructureSummary.logistics_notes.length && (
-                  <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Logistics notes</p>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-white/70">
+                  <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Logistics notes</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                       {fitSummary.infrastructureSummary.logistics_notes.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
@@ -629,7 +629,7 @@ export default function GisReportPage() {
           </div>
         )}
 
-        <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-3 shadow-[0_16px_60px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+        <div className="mt-6 rounded-3xl border border-border bg-card p-3 shadow-sm">
           <div className="flex flex-wrap gap-2">
             {REPORT_TABS.map((tab) => {
               const Icon = tab.icon;
@@ -639,7 +639,7 @@ export default function GisReportPage() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ${isActive ? "border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-[0_10px_24px_rgba(34,211,238,0.12)]" : "border-white/10 bg-white/[0.04] text-white/65 hover:border-white/20 hover:bg-white/[0.07] hover:text-white"}`}
+                  className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ${isActive ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-muted/30 text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground"}`}
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
@@ -660,52 +660,52 @@ export default function GisReportPage() {
             <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
               <SectionCard title="Project Snapshot" icon={<Sparkles className="h-4 w-4" />}>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Fit status</p>
-                    <p className="mt-2 text-2xl font-semibold capitalize text-white">{fitSummary.fitStatus || "unknown"}</p>
-                    <p className="mt-1 text-sm text-white/55">Fit score {formatNumber(fitSummary.fitScore, 1)}%</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Fit status</p>
+                    <p className="mt-2 text-2xl font-semibold capitalize text-foreground">{fitSummary.fitStatus || "unknown"}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Fit score {formatNumber(fitSummary.fitScore, 1)}%</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Budget</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Budget</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">
                       {payload.costEstimate ? formatCurrencyINR(payload.costEstimate.totalBudget) : "—"}
                     </p>
-                    <p className="mt-1 text-sm text-white/55">Estimated total cost in INR</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Estimated total cost in INR</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Duration</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.estimatedDurationDays} days</p>
-                    <p className="mt-1 text-sm text-white/55">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Duration</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{payload.timeEstimate.estimatedDurationDays} days</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       Range {payload.timeEstimate.durationRangeDays.min} - {payload.timeEstimate.durationRangeDays.max} days
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Crew</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{payload.workforceEstimate.totalRecommendedWorkers}</p>
-                    <p className="mt-1 text-sm text-white/55">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Crew</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{payload.workforceEstimate.totalRecommendedWorkers}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       Peak {payload.workforceEstimate.peakCrewSize} · range {payload.workforceEstimate.totalWorkerRange.min} - {payload.workforceEstimate.totalWorkerRange.max}
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/40">Report summary</p>
+                <div className="mt-4 rounded-2xl border border-border bg-muted/30 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Report summary</p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Session</p>
-                      <p className="mt-1 text-sm text-white/80">{data.session.id}</p>
+                    <div className="rounded-xl border border-border bg-muted/40 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Session</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{data.session.id}</p>
                     </div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Workflow</p>
-                      <p className="mt-1 text-sm text-white/80">{data.session.workflowState}</p>
+                    <div className="rounded-xl border border-border bg-muted/40 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Workflow</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{data.session.workflowState}</p>
                     </div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Version</p>
-                      <p className="mt-1 text-sm text-white/80">{data.report.versionNumber}</p>
+                    <div className="rounded-xl border border-border bg-muted/40 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Version</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{data.report.versionNumber}</p>
                     </div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Material lines</p>
-                      <p className="mt-1 text-sm text-white/80">{payload.detailedTakeoff.totalMaterialLines}</p>
+                    <div className="rounded-xl border border-border bg-muted/40 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Material lines</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{payload.detailedTakeoff.totalMaterialLines}</p>
                     </div>
                   </div>
                 </div>
@@ -713,30 +713,30 @@ export default function GisReportPage() {
 
               <SectionCard title="Model Basis" icon={<Building2 className="h-4 w-4" />}>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Aggregate geometry</p>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/75">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Aggregate geometry</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-muted-foreground">
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Elements</p>
-                        <p className="mt-1 font-semibold text-white">{payload.dimensionSummary.totalElements}</p>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Elements</p>
+                        <p className="mt-1 font-semibold text-foreground">{payload.dimensionSummary.totalElements}</p>
                       </div>
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Volume</p>
-                        <p className="mt-1 font-semibold text-white">{formatNumber(payload.dimensionSummary.totalVolume)} cum</p>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Volume</p>
+                        <p className="mt-1 font-semibold text-foreground">{formatNumber(payload.dimensionSummary.totalVolume)} cum</p>
                       </div>
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Footprint</p>
-                        <p className="mt-1 font-semibold text-white">{formatNumber(payload.dimensionSummary.totalFootprintArea)} sqm</p>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Footprint</p>
+                        <p className="mt-1 font-semibold text-foreground">{formatNumber(payload.dimensionSummary.totalFootprintArea)} sqm</p>
                       </div>
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Surface</p>
-                        <p className="mt-1 font-semibold text-white">{formatNumber(payload.dimensionSummary.totalSurfaceArea)} sqm</p>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Surface</p>
+                        <p className="mt-1 font-semibold text-foreground">{formatNumber(payload.dimensionSummary.totalSurfaceArea)} sqm</p>
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Fit context</p>
-                    <p className="mt-3 text-sm leading-6 text-white/70">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Fit context</p>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
                       This report uses geometry-derived dimensions, then validates them against the IFC type labels. Timeline, workforce, and cost are then scaled from the actual footprint and material mix rather than a flat rule of thumb.
                     </p>
                   </div>
@@ -744,9 +744,9 @@ export default function GisReportPage() {
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {Object.entries(payload.elementCounts).map(([type, count]) => (
-                    <div key={type} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70">
-                      <span className="uppercase tracking-[0.14em] text-white/40">{type}</span>
-                      <span className="ml-2 font-semibold text-white">{count}</span>
+                    <div key={type} className="rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+                      <span className="uppercase tracking-[0.14em] text-muted-foreground">{type}</span>
+                      <span className="ml-2 font-semibold text-foreground">{count}</span>
                     </div>
                   ))}
                 </div>
@@ -758,7 +758,7 @@ export default function GisReportPage() {
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <SectionCard title="Project Timeline" icon={<Sparkles className="h-4 w-4" />}>
                 <ProjectTimeline phases={payload.projectTimeline || []} />
-                <p className="mt-4 text-sm text-white/55">
+                <p className="mt-4 text-sm text-muted-foreground">
                   Each phase is sequenced from planning through handoff with duration estimates, dependencies, and deliverables.
                 </p>
               </SectionCard>
@@ -766,33 +766,33 @@ export default function GisReportPage() {
               <div className="space-y-6">
                 <SectionCard title="Schedule Estimate" icon={<CalendarDays className="h-4 w-4" />}>
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Structural</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.structural} days</p>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Structural</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{payload.timeEstimate.phaseDays.structural} days</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Envelope</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.envelope} days</p>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Envelope</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{payload.timeEstimate.phaseDays.envelope} days</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Finishes</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.finishes} days</p>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Finishes</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{payload.timeEstimate.phaseDays.finishes} days</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Services</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{payload.timeEstimate.phaseDays.services} days</p>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Services</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{payload.timeEstimate.phaseDays.services} days</p>
                     </div>
                   </div>
-                  <p className="mt-4 text-sm text-white/55">
+                  <p className="mt-4 text-sm text-muted-foreground">
                     Duration band: {payload.timeEstimate.durationRangeDays.min} - {payload.timeEstimate.durationRangeDays.max} days. {payload.timeEstimate.basis}
                   </p>
                 </SectionCard>
 
                 <SectionCard title="Project Handoff" icon={<Building2 className="h-4 w-4" />}>
-                  <div className="space-y-4 text-sm text-white/75">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/40">Next step</p>
-                      <p className="mt-2 text-white/80">{payload.projectHandoff.nextStep}</p>
+                  <div className="space-y-4 text-sm text-muted-foreground">
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Next step</p>
+                      <p className="mt-2 text-muted-foreground">{payload.projectHandoff.nextStep}</p>
                     </div>
                     <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-amber-200/70">Warnings</p>
@@ -803,7 +803,7 @@ export default function GisReportPage() {
                           ))}
                         </ul>
                       ) : (
-                        <p className="mt-2 text-white/65">No critical warnings detected.</p>
+                        <p className="mt-2 text-muted-foreground">No critical warnings detected.</p>
                       )}
                     </div>
                   </div>
@@ -815,50 +815,50 @@ export default function GisReportPage() {
           {activeTab === "materials" && (
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <SectionCard title="Takeoff Summary" icon={<ClipboardList className="h-4 w-4" />}>
-                <div className="space-y-4 text-sm text-white/75">
+                <div className="space-y-4 text-sm text-muted-foreground">
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     {Object.entries(payload.elementCounts).map(([type, count]) => (
-                      <div key={type} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">{type}</p>
-                        <p className="mt-1 text-lg font-semibold text-white">{count}</p>
+                      <div key={type} className="rounded-2xl border border-border bg-muted/30 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{type}</p>
+                        <p className="mt-1 text-lg font-semibold text-foreground">{count}</p>
                       </div>
                     ))}
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Detailed structural counts</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Detailed structural counts</p>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       {payload.detailedTakeoff.structural.map((item) => (
-                        <div key={item.type} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                          <span className="capitalize text-white/80">{item.type}</span>
-                          <span className="text-white/90">{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
+                        <div key={item.type} className="flex items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2">
+                          <span className="capitalize text-muted-foreground">{item.type}</span>
+                          <span className="text-muted-foreground">{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/40">Openings</p>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Openings</p>
                       <div className="mt-3 space-y-2">
                         {payload.detailedTakeoff.openings.map((item) => (
-                          <div key={item.type} className="flex items-center justify-between text-sm text-white/75">
+                          <div key={item.type} className="flex items-center justify-between text-sm text-muted-foreground">
                             <span className="capitalize">{item.type}</span>
                             <span>{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
                           </div>
                         ))}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/40">Other elements</p>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Other elements</p>
                       <div className="mt-3 space-y-2">
                         {payload.detailedTakeoff.others.length ? (
                           payload.detailedTakeoff.others.map((item) => (
-                            <div key={item.type} className="flex items-center justify-between text-sm text-white/75">
+                            <div key={item.type} className="flex items-center justify-between text-sm text-muted-foreground">
                               <span className="capitalize">{item.type}</span>
                               <span>{item.count} · {formatNumber(item.quantity)} {item.unit}</span>
                             </div>
                           ))
                         ) : (
-                          <p className="text-sm text-white/45">No additional element classes detected.</p>
+                          <p className="text-sm text-muted-foreground">No additional element classes detected.</p>
                         )}
                       </div>
                     </div>
@@ -867,10 +867,10 @@ export default function GisReportPage() {
               </SectionCard>
 
               <SectionCard title="Material Estimate" icon={<Ruler className="h-4 w-4" />}>
-                <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+                <div className="overflow-hidden rounded-2xl border border-border bg-muted/30">
                   <div className="max-h-[30rem] overflow-auto">
                     <table className="w-full text-left text-sm">
-                      <thead className="sticky top-0 bg-[#151b29] text-white/45">
+                      <thead className="sticky top-0 bg-muted text-muted-foreground">
                         <tr>
                           <th className="px-3 py-2 font-medium">Material</th>
                           <th className="px-3 py-2 font-medium">Element</th>
@@ -880,14 +880,14 @@ export default function GisReportPage() {
                       </thead>
                       <tbody>
                         {payload.materialEstimate.map((row) => (
-                          <tr key={`${row.material}-${row.elementType}-${row.unit}`} className="border-t border-white/10 align-top">
-                            <td className="px-3 py-2 text-white/85">{row.material}</td>
-                            <td className="px-3 py-2 text-white/70 capitalize">{row.elementType}</td>
-                            <td className="px-3 py-2 text-white/85">
+                          <tr key={`${row.material}-${row.elementType}-${row.unit}`} className="border-t border-border align-top">
+                            <td className="px-3 py-2 text-muted-foreground">{row.material}</td>
+                            <td className="px-3 py-2 text-muted-foreground capitalize">{row.elementType}</td>
+                            <td className="px-3 py-2 text-muted-foreground">
                               {formatNumber(row.quantityRange.min)} - {formatNumber(row.quantityRange.max)} {row.unit}
-                              <div className="text-[11px] text-white/45">mid {formatNumber(row.quantity)} {row.unit}</div>
+                              <div className="text-[11px] text-muted-foreground">mid {formatNumber(row.quantity)} {row.unit}</div>
                             </td>
-                            <td className="px-3 py-2 text-white/55">{row.basis}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.basis}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -895,18 +895,18 @@ export default function GisReportPage() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Material totals</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{payload.materialTotals.totalElements}</p>
-                    <p className="text-sm text-white/50">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Material totals</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{payload.materialTotals.totalElements}</p>
+                    <p className="text-sm text-muted-foreground">
                       quantity range {formatNumber(payload.materialTotals.totalQuantityRange.min)} - {formatNumber(payload.materialTotals.totalQuantityRange.max)}
                     </p>
-                    <p className="text-sm text-white/50">mid {formatNumber(payload.materialTotals.totalQuantity)}</p>
+                    <p className="text-sm text-muted-foreground">mid {formatNumber(payload.materialTotals.totalQuantity)}</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Model context</p>
-                    <p className="mt-2 text-sm text-white/70">Session version {data.session.currentVersionNumber}</p>
-                    <p className="text-sm text-white/70">Validation snapshot {data.validationSnapshot?.status ?? "missing"}</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Model context</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Session version {data.session.currentVersionNumber}</p>
+                    <p className="text-sm text-muted-foreground">Validation snapshot {data.validationSnapshot?.status ?? "missing"}</p>
                   </div>
                 </div>
               </SectionCard>
@@ -922,27 +922,27 @@ export default function GisReportPage() {
               <SectionCard title="Crew Mix" icon={<HardHat className="h-4 w-4" />}>
                 <div className="grid gap-3 md:grid-cols-2">
                   {payload.recommendedWorkerMix.map((worker) => (
-                    <div key={worker.role} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 flex items-center justify-between">
-                      <span className="capitalize text-white/80">{worker.role.replaceAll("_", " ")}</span>
-                      <span className="font-semibold text-white">{worker.count}</span>
+                    <div key={worker.role} className="rounded-2xl border border-border bg-muted/30 p-3 flex items-center justify-between">
+                      <span className="capitalize text-muted-foreground">{worker.role.replaceAll("_", " ")}</span>
+                      <span className="font-semibold text-foreground">{worker.count}</span>
                     </div>
                   ))}
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Recommended workers</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{payload.workforceEstimate.totalRecommendedWorkers}</p>
-                    <p className="mt-1 text-sm text-white/55">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Recommended workers</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{payload.workforceEstimate.totalRecommendedWorkers}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       range {payload.workforceEstimate.totalWorkerRange.min} - {payload.workforceEstimate.totalWorkerRange.max}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Peak crew size</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{payload.workforceEstimate.peakCrewSize}</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Peak crew size</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{payload.workforceEstimate.peakCrewSize}</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Handoff</p>
-                    <p className="mt-2 text-sm text-white/70">Ready for company approval and hiring gate.</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Handoff</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Ready for company approval and hiring gate.</p>
                   </div>
                 </div>
               </SectionCard>
@@ -953,31 +953,31 @@ export default function GisReportPage() {
             <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
               <SectionCard title="Financial Estimate" icon={<Building2 className="h-4 w-4" />}>
                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Material cost</p>
-                    <p className="mt-2 text-xl font-semibold text-white">{formatCurrencyINR(payload.costEstimate.totalMaterialCost)}</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Material cost</p>
+                    <p className="mt-2 text-xl font-semibold text-foreground">{formatCurrencyINR(payload.costEstimate.totalMaterialCost)}</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Labour cost</p>
-                    <p className="mt-2 text-xl font-semibold text-white">{formatCurrencyINR(payload.costEstimate.totalLaborCost)}</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Labour cost</p>
+                    <p className="mt-2 text-xl font-semibold text-foreground">{formatCurrencyINR(payload.costEstimate.totalLaborCost)}</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Contingency (10%)</p>
-                    <p className="mt-2 text-xl font-semibold text-white">{formatCurrencyINR(payload.costEstimate.contingencyCost)}</p>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Contingency (10%)</p>
+                    <p className="mt-2 text-xl font-semibold text-foreground">{formatCurrencyINR(payload.costEstimate.contingencyCost)}</p>
                   </div>
                   <div className="col-span-full rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5 mt-2">
                     <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/70">Estimated total budget</p>
                     <p className="mt-2 text-3xl font-bold text-emerald-100">{formatCurrencyINR(payload.costEstimate.totalBudget)}</p>
-                    <p className="mt-1 text-[11px] text-white/50">Includes materials, labour, and 10% contingency.</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Includes materials, labour, and 10% contingency.</p>
                   </div>
                 </div>
               </SectionCard>
 
               <SectionCard title="Project Handoff" icon={<Building2 className="h-4 w-4" />}>
-                <div className="space-y-4 text-sm text-white/75">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Next step</p>
-                    <p className="mt-2 text-white/80">{payload.projectHandoff.nextStep}</p>
+                <div className="space-y-4 text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Next step</p>
+                    <p className="mt-2 text-muted-foreground">{payload.projectHandoff.nextStep}</p>
                   </div>
                   <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-amber-200/70">Warnings</p>
@@ -988,12 +988,12 @@ export default function GisReportPage() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="mt-2 text-white/65">No critical warnings detected.</p>
+                      <p className="mt-2 text-muted-foreground">No critical warnings detected.</p>
                     )}
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">Assumptions</p>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-white/70">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Assumptions</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
                       {payload.projectHandoff.assumptions.map((assumption) => (
                         <li key={assumption}>{assumption}</li>
                       ))}
