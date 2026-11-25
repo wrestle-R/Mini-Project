@@ -4,7 +4,9 @@ import dbConnect from "@/lib/db";
 import Company from "@/lib/models/Company";
 import Contractor from "@/lib/models/Contractor";
 import Worker from "@/lib/models/Worker";
+import FaceEmbedding from "@/lib/models/FaceEmbedding";
 import { verifyCustomToken } from "@/lib/auth";
+import { getPythonApiBase } from "@/lib/python-attendance";
 
 // Verify Firebase token (worker auth)
 function verifyFirebaseToken(authHeader: string | null) {
@@ -28,6 +30,13 @@ function verifyFirebaseToken(authHeader: string | null) {
 
 export async function POST(req: Request) {
   try {
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return NextResponse.json(
+        { error: "Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in .env.local" },
+        { status: 500 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const role = formData.get("role") as string | null;
@@ -113,6 +122,45 @@ export async function POST(req: Request) {
         { firebaseUid: userId },
         { $set: { photoUrl: imageUrl } }
       );
+
+      try {
+        const form = new FormData();
+        form.append("employee_id", userId || "");
+        form.append("image_url", imageUrl);
+        form.append("allow_update", "true");
+
+        const pyRes = await fetch(`${getPythonApiBase()}/register_face_from_url`, {
+          method: "POST",
+          body: form,
+        });
+
+        if (pyRes.ok) {
+          const pyData = (await pyRes.json()) as {
+            embedding?: number[];
+            dim?: number;
+          };
+
+          const embedding = Array.isArray(pyData.embedding) ? pyData.embedding : [];
+          const dim = Number(pyData.dim ?? embedding.length ?? 0);
+
+          await FaceEmbedding.findOneAndUpdate(
+            { subjectType: "worker", subjectId: userId },
+            {
+              $set: {
+                imageUrl,
+                embedding,
+                dim,
+                embeddingModel: "facenet-pytorch",
+                version: "vggface2-inceptionresnetv1",
+                isActive: true,
+              },
+            },
+            { upsert: true }
+          );
+        }
+      } catch (enrollErr) {
+        console.error("[API/upload] Worker face enrollment failed:", enrollErr);
+      }
     }
 
     return NextResponse.json({ url: imageUrl });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { motion } from "framer-motion";
 import {
@@ -42,7 +42,7 @@ export default function CompanyContractorsPage() {
     phone: "",
   });
 
-  const fetchContractors = async () => {
+  const fetchContractors = useCallback(async () => {
     if (!token) return;
     try {
       const res = await fetch("/api/contractors", {
@@ -57,11 +57,11 @@ export default function CompanyContractorsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchContractors();
-  }, [token]);
+  }, [fetchContractors]);
 
   const handleCreate = async () => {
     if (!token || !form.email.trim()) {

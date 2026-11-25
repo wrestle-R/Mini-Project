@@ -18,7 +18,6 @@ import {
 } from "react-icons/fi";
 
 /* ─── Types ─── */
-type ProjectSize = "small" | "medium" | "large" | "any";
 interface IExtProfile {
   bio: string;
   industry: string;

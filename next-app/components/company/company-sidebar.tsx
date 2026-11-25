@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useCompany } from "@/contexts/CompanyContext";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 
 import {
   Sidebar,
@@ -33,32 +31,38 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { Building2, Sun, Moon, ChevronUp, LogOut, User } from "lucide-react";
+import { Building2, ChevronUp, LogOut, User } from "lucide-react";
 import {
   FiHome,
   FiFolder,
   FiUserPlus,
   FiClipboard,
   FiCamera,
+  FiBox,
+  FiFileText,
+  FiMap,
+  FiPackage,
 } from "react-icons/fi";
+import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 
 export function CompanySidebar() {
   const pathname = usePathname();
   const { state } = useSidebar();
   const { user, logout } = useCompany();
   const displayName = user.name || "Company";
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
 
   const isActive = (url: string) => pathname === url;
-  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
   const navItems = [
     { label: "Dashboard", href: "/company/dashboard", icon: FiHome },
     { label: "Projects", href: "/company/projects", icon: FiFolder },
     { label: "Contractors", href: "/company/contractors", icon: FiUserPlus },
     { label: "Assignments", href: "/company/assignments", icon: FiClipboard },
+    { label: "Materials", href: "/company/materials", icon: FiPackage },
+    { label: "Daily Reports", href: "/company/daily-reports", icon: FiFileText },
+    { label: "GIS", href: "/company/gis", icon: FiMap },
+    { label: "IFC Studio", href: "/company/ifc-viewer", icon: FiBox },
     { label: "Attendance Cam", href: "/company/attendance-cam", icon: FiCamera },
   ];
 
@@ -67,11 +71,11 @@ export function CompanySidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="BuildSync">
+            <SidebarMenuButton size="lg" asChild tooltip="InfraSaathi">
               <Link href="/company/dashboard">
                 <Building2 className="h-6 w-6 text-primary shrink-0" />
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">BuildSync</span>
+                  <span className="font-semibold">InfraSaathi</span>
                   <span className="text-xs text-muted-foreground">Company</span>
                 </div>
               </Link>
@@ -109,6 +113,13 @@ export function CompanySidebar() {
       </SidebarContent>
 
       <SidebarFooter>
+        <div className="space-y-2 px-2 pb-2">
+          <ThemeToggle fullWidth={state === "expanded"} />
+          <GoogleTranslateLanguageSelector
+            variant="sidebar"
+            compact={state === "collapsed"}
+          />
+        </div>
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -147,15 +158,6 @@ export function CompanySidebar() {
                     <span>My Profile</span>
                   </Link>
                 </DropdownMenuItem>
-                {mounted && (
-                  <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer py-2 px-3">
-                    {resolvedTheme === "dark"
-                      ? <Sun className="mr-2 h-4 w-4 text-muted-foreground" />
-                      : <Moon className="mr-2 h-4 w-4 text-muted-foreground" />
-                    }
-                    <span>Change Look ({resolvedTheme === "dark" ? "Light" : "Dark"})</span>
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuSeparator className="my-1" />
                 <DropdownMenuItem
                   onClick={logout}

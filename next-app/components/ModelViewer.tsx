@@ -1,569 +1,519 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { FiSun, FiMoon, FiInfo, FiX, FiChevronDown, FiChevronRight, FiCopy, FiCheck } from "react-icons/fi";
+
+export interface ElementMetadata {
+  globalId: string;
+  type: string;
+  name: string;
+  description: string;
+  objectType?: string;
+  properties: Record<string, Record<string, unknown>>;
+}
 
 interface ModelViewerProps {
   modelUrl: string;
+  originalModelUrl?: string;
+  displayMode?: "current" | "original" | "comparison";
+  metadataUrl?: string;
+  authToken?: string | null;
+  onElementSelect?: (element: ElementMetadata | null) => void;
 }
 
-/* ─────────────────────────────────────────────
-   Recursive Metadata Renderer
-   ───────────────────────────────────────────── */
-
-function MetadataValue({ value }: { value: any }) {
-  if (value === null || value === undefined) return <span className="text-muted-foreground italic">—</span>;
-  if (typeof value === "boolean") return <span className="text-foreground font-medium">{value ? "Yes" : "No"}</span>;
-  if (typeof value === "number") return <span className="text-foreground font-mono">{value}</span>;
-  if (typeof value === "string") return <span className="text-foreground break-words">{value || "—"}</span>;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-muted-foreground italic">—</span>;
-    // Array of primitives → comma separated
-    if (value.every((v) => typeof v === "string" || typeof v === "number"))
-      return <span className="text-foreground break-words">{value.join(", ")}</span>;
-    // Array of objects → rendered as sub-sections
-    return (
-      <div className="col-span-2 ml-2 space-y-1 mt-1">
-        {value.map((item, idx) => (
-          <div key={idx} className="rounded bg-muted/30 p-1.5">
-            {typeof item === "object" && item !== null ? (
-              <MetadataObject data={item} />
-            ) : (
-              <span className="text-foreground text-xs">{String(item)}</span>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (typeof value === "object") return <MetadataObject data={value} />;
-  return <span className="text-foreground">{String(value)}</span>;
-}
-
-function MetadataObject({ data }: { data: Record<string, any> }) {
-  return (
-    <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-2 gap-y-0.5 text-xs">
-      {Object.entries(data).map(([k, v]) => {
-        // Nested objects/arrays get their own collapsible section
-        if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-          return (
-            <div key={k} className="col-span-2 mt-1">
-              <CollapsibleSection title={k} defaultOpen={false}>
-                <MetadataObject data={v} />
-              </CollapsibleSection>
-            </div>
-          );
-        }
-        return (
-          <React.Fragment key={k}>
-            <span className="text-muted-foreground truncate" title={k}>{k}</span>
-            <MetadataValue value={v} />
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-function CollapsibleSection({
-  title,
-  children,
-  defaultOpen = true,
-  accent = false,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-  accent?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="rounded-md border border-border/50 overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer ${
-          accent
-            ? "bg-primary/10 text-primary hover:bg-primary/15"
-            : "bg-muted/40 text-foreground hover:bg-muted/60"
-        }`}
-      >
-        {open ? <FiChevronDown size={12} /> : <FiChevronRight size={12} />}
-        {title}
-      </button>
-      {open && <div className="px-2 py-1.5">{children}</div>}
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   GUID / clipboard copy button
-   ───────────────────────────────────────────── */
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = useCallback(() => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }, [text]);
-  return (
-    <button
-      onClick={copy}
-      className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-      title="Copy to clipboard"
-    >
-      {copied ? <FiCheck size={11} /> : <FiCopy size={11} />}
-    </button>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   Main ModelViewer Component
-   ───────────────────────────────────────────── */
-export default function ModelViewer({ modelUrl }: ModelViewerProps) {
+export default function ModelViewer({
+  modelUrl,
+  originalModelUrl,
+  displayMode = "current",
+  metadataUrl,
+  authToken,
+  onElementSelect,
+}: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [selectedElement, setSelectedElement] = useState<Record<string, any> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const metadataRef = useRef<Record<string, ElementMetadata>>({});
+  const onElementSelectRef = useRef(onElementSelect);
+  onElementSelectRef.current = onElementSelect;
+  const loadRevisionRef = useRef({ current: 0, original: 0 });
 
-  // Scene references for theme switching
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
-  const gridRef = useRef<THREE.GridHelper | null>(null);
+  // Store scene objects to avoid reinitializing on model reload
+  const sceneRef = useRef<{
+    renderer?: THREE.WebGLRenderer;
+    scene?: THREE.Scene;
+    camera?: THREE.PerspectiveCamera;
+    controls?: OrbitControls;
+    animFrameId?: number;
+    clearHighlight?: () => void;
+    modelRoot?: THREE.Object3D;
+    originalModelRoot?: THREE.Object3D;
+  }>({});
 
-  // Update theme colors when toggled
+  const disposeObject = (object?: THREE.Object3D) => {
+    if (!object) return;
+    object.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.geometry.dispose();
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((material) => material.dispose());
+        if (mesh.userData.ghostMaterial) {
+          (mesh.userData.ghostMaterial as THREE.Material).dispose();
+        }
+      }
+    });
+  };
+
+  const cloneMaterial = (material: THREE.Material) => {
+    const nextMaterial = material.clone() as THREE.MeshStandardMaterial;
+    nextMaterial.side = THREE.DoubleSide;
+    if (!("color" in nextMaterial) || !nextMaterial.color) {
+      nextMaterial.color = new THREE.Color(0xb0bcc8);
+    }
+    if ("roughness" in nextMaterial && nextMaterial.roughness === undefined) {
+      nextMaterial.roughness = 0.55;
+    }
+    if ("metalness" in nextMaterial && nextMaterial.metalness === undefined) {
+      nextMaterial.metalness = 0.15;
+    }
+    return nextMaterial;
+  };
+
+  const applyDisplayMode = useCallback(
+    (
+      mode: "current" | "original" | "comparison",
+      currentRoot?: THREE.Object3D,
+      originalRoot?: THREE.Object3D
+    ) => {
+      if (currentRoot) {
+        currentRoot.visible = mode === "current" || mode === "comparison";
+      }
+
+      if (originalRoot) {
+        originalRoot.visible = mode === "original" || mode === "comparison";
+
+        originalRoot.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            if (mode === "comparison") {
+              if (!mesh.userData.ghostMaterial) {
+                const ghostMat = new THREE.MeshStandardMaterial({
+                  color: 0x888888,
+                  transparent: true,
+                  opacity: 0.15,
+                  wireframe: true,
+                  depthWrite: false,
+                });
+                mesh.userData.ghostMaterial = ghostMat;
+              }
+              mesh.material = mesh.userData.ghostMaterial;
+            } else if (mesh.userData.originalMaterial) {
+              mesh.material = mesh.userData.originalMaterial;
+            }
+          }
+        });
+      }
+    },
+    []
+  );
+
+  // Fetch metadata when URL changes
   useEffect(() => {
-    if (!sceneRef.current || !rendererRef.current) return;
+    metadataRef.current = {};
+    if (!metadataUrl) return;
+    const controller = new AbortController();
+    fetch(metadataUrl, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Metadata request failed (${res.status})`);
+        return res.json();
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) metadataRef.current = data;
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) console.error("Failed to load metadata:", err);
+      });
+    return () => controller.abort();
+  }, [metadataUrl, authToken]);
 
-    const bgColor = isDarkMode ? 0x111113 : 0xf4f4f7;
-    sceneRef.current.background = new THREE.Color(bgColor);
-    if (sceneRef.current.fog) {
-      (sceneRef.current.fog as THREE.FogExp2).color.set(bgColor);
-    }
-
-    if (ambientLightRef.current) {
-      ambientLightRef.current.intensity = isDarkMode ? 0.6 : 1.0;
-    }
-
-    // Update grid colors for the current theme
-    if (gridRef.current) {
-      sceneRef.current.remove(gridRef.current);
-      const newGrid = new THREE.GridHelper(
-        200,
-        50,
-        isDarkMode ? 0x444455 : 0xccccdd,
-        isDarkMode ? 0x222233 : 0xddddee
-      );
-      gridRef.current = newGrid;
-      sceneRef.current.add(newGrid);
-    }
-  }, [isDarkMode]);
-
+  // Initialize scene (only once)
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-
-    // Reset loading state every time the model URL changes
-    setIsLoading(true);
+    if (!container || sceneRef.current.renderer) return; // Already initialized
 
     // --- Scene ---
     const scene = new THREE.Scene();
-    sceneRef.current = scene;
-    const initialBg = isDarkMode ? 0x111113 : 0xf4f4f7;
-    scene.background = new THREE.Color(initialBg);
-    scene.fog = new THREE.FogExp2(initialBg, 0.003);
+    scene.background = new THREE.Color(0x111113);
 
     // --- Camera ---
     const camera = new THREE.PerspectiveCamera(
       50,
       container.clientWidth / container.clientHeight,
       0.1,
-      10000
+      100000
     );
-    camera.position.set(40, 30, 40);
+    camera.position.set(30, 25, 30);
 
     // --- Renderer ---
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    rendererRef.current = renderer;
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+    });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.5;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.shadowMap.enabled = true;
+    renderer.toneMappingExposure = 1.0;
+    // Disable shadow maps to prevent WebGL2 Texture immutable crashes
+    renderer.shadowMap.enabled = false;
     container.appendChild(renderer.domElement);
 
-    // --- Lights ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, isDarkMode ? 0.6 : 1.0);
-    ambientLightRef.current = ambientLight;
+    const resizeRenderer = () => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      if (width === 0 || height === 0) return;
+
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+    };
+
+    // --- Lighting ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
     const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    mainLight.position.set(50, 100, 50);
-    mainLight.castShadow = true;
-    mainLight.shadow.mapSize.width = 2048;
-    mainLight.shadow.mapSize.height = 2048;
+    mainLight.position.set(40, 80, 40);
+    // Shadows disabled for main light
     scene.add(mainLight);
 
-    const fillLight = new THREE.DirectionalLight(0xddeeff, 0.4);
-    fillLight.position.set(-50, 20, -20);
+    const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.4);
+    fillLight.position.set(-30, 20, -20);
     scene.add(fillLight);
 
-    const backLight = new THREE.DirectionalLight(0xfff5ee, 0.3);
-    backLight.position.set(0, -30, -50);
-    scene.add(backLight);
+    const hemiLight = new THREE.HemisphereLight(0xb1c4de, 0x8a7560, 0.35);
+    scene.add(hemiLight);
+
+    // --- Ground plane ---
+    const groundGeo = new THREE.PlaneGeometry(200, 200);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x181820,
+      roughness: 0.95,
+      metalness: 0.0,
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    // Shadows disabled for ground plane
+    scene.add(ground);
 
     // --- Grid ---
-    const grid = new THREE.GridHelper(
-      200,
-      50,
-      isDarkMode ? 0x444455 : 0xccccdd,
-      isDarkMode ? 0x222233 : 0xddddee
-    );
-    gridRef.current = grid;
+    const grid = new THREE.GridHelper(200, 80, 0x2a2a35, 0x1d1d25);
+    grid.position.y = 0;
     scene.add(grid);
 
     // --- Controls ---
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 2;
+    controls.maxDistance = 100000;
+    controls.maxPolarAngle = Math.PI / 2 + 0.1;
 
-    // --- Raycasting for Inspection ---
+    // --- Selection / Raycasting state ---
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    let highlightedMesh: THREE.Mesh | null = null;
-    let originalEmissive: THREE.Color | null = null;
+    const originalMaterials = new Map<
+      THREE.Mesh,
+      THREE.Material | THREE.Material[]
+    >();
 
-    const onPointerDown = (event: PointerEvent) => {
-      const rect = container.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / container.clientWidth) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / container.clientHeight) * 2 + 1;
+    const clearHighlight = () => {
+      originalMaterials.forEach((mat, mesh) => {
+        const highlights = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        highlights.forEach((highlight) => highlight.dispose());
+        mesh.material = mat;
+      });
+      originalMaterials.clear();
+    };
+
+    const highlightNode = (node: THREE.Object3D) => {
+      clearHighlight();
+      node.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          originalMaterials.set(mesh, mesh.material);
+          const highlight = (material: THREE.Material) => {
+            const cloned = material.clone() as THREE.MeshStandardMaterial;
+            cloned.emissive = new THREE.Color(0x2266cc);
+            cloned.emissiveIntensity = 0.45;
+            return cloned;
+          };
+          mesh.material = Array.isArray(mesh.material)
+            ? mesh.material.map(highlight)
+            : highlight(mesh.material);
+        }
+      });
+    };
+
+    // Distinguish click from orbit drag
+    let mouseDownPos = { x: 0, y: 0 };
+
+    const onMouseDown = (e: MouseEvent) => {
+      mouseDownPos = { x: e.clientX, y: e.clientY };
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      const dx = Math.abs(e.clientX - mouseDownPos.x);
+      const dy = Math.abs(e.clientY - mouseDownPos.y);
+      if (dx > 5 || dy > 5) return; // was a drag
+
+      if (!sceneRef.current.modelRoot) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(scene.children, true);
-
-      // Reset previous highlight
-      if (highlightedMesh && originalEmissive) {
-        const prevMat = highlightedMesh.material as THREE.MeshStandardMaterial;
-        if (prevMat && prevMat.emissive) {
-          prevMat.emissive.copy(originalEmissive);
-        }
-      }
+      const intersects = raycaster.intersectObjects([sceneRef.current.modelRoot], true);
 
       if (intersects.length > 0) {
-        const object = intersects[0].object as THREE.Mesh;
-
-        // Resolve metadata: Three.js stores GLTF node extras in the object's
-        // userData. Try the mesh itself first, then its parent (some GLTF
-        // parsers put node-level extras one level up in the hierarchy).
-        let userData = object.userData as Record<string, unknown>;
-        if (!userData._ifc_metadata && object.parent) {
-          userData = { ...object.parent.userData, ...userData };
-        }
-
-        let meta: Record<string, unknown> = userData;
-        if (userData._ifc_metadata) {
-          try {
-            meta = JSON.parse(userData._ifc_metadata as string);
-          } catch {
-            // keep original userData
+        let obj: THREE.Object3D | null = intersects[0].object;
+        while (obj && obj !== sceneRef.current.modelRoot) {
+          const metadata =
+            metadataRef.current[obj.name] ??
+            (obj.userData.ifcMetadata as ElementMetadata | undefined);
+          if (metadata?.globalId) {
+            highlightNode(obj);
+            onElementSelectRef.current?.(metadata);
+            return;
           }
+          obj = obj.parent;
         }
-
-        if (meta && meta.GlobalId) {
-          highlightedMesh = object;
-          const mat = object.material as THREE.MeshStandardMaterial;
-          if (mat && mat.emissive) {
-            originalEmissive = mat.emissive.clone();
-            mat.emissive.setHex(0x334466);
-          }
-          setSelectedElement(meta);
-        } else {
-          setSelectedElement(null);
-        }
-      } else {
-        setSelectedElement(null);
       }
+      clearHighlight();
+      onElementSelectRef.current?.(null);
     };
-    container.addEventListener("pointerdown", onPointerDown);
 
-    // --- Load Model ---
-    const loader = new GLTFLoader();
-    const fullUrl = `http://localhost:8000${modelUrl}`;
+    renderer.domElement.addEventListener("mousedown", onMouseDown);
+    renderer.domElement.addEventListener("mouseup", onMouseUp);
 
-    loader.load(
-      fullUrl,
-      (gltf) => {
-        const model = gltf.scene;
-        model.rotation.x = -Math.PI / 2; // IFC Y-up → Three.js Z-up rotation fix
-
-        model.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mesh = child as THREE.Mesh;
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-
-            // Compute normals if the GLB doesn't include them
-            if (mesh.geometry && !mesh.geometry.attributes.normal) {
-              mesh.geometry.computeVertexNormals();
-            }
-
-            // Ensure correct rendering: no metalness, double-sided faces
-            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-            mats.forEach((mat) => {
-              const m = mat as THREE.MeshStandardMaterial;
-              m.side = THREE.DoubleSide;
-              // GLB default material has metalness=1 which looks black without envmap
-              m.metalness = 0;
-              m.roughness = 0.7;
-              m.needsUpdate = true;
-            });
-
-            // Merge GLTF node extras (from parent) into mesh.userData so the
-            // raycaster can find _ifc_metadata regardless of how the GLTF
-            // loader distributes extras across the hierarchy.
-            if (mesh.parent && mesh.parent.userData) {
-              mesh.userData = { ...mesh.parent.userData, ...mesh.userData };
-            }
-            // Parse _ifc_metadata into userData for quick raycaster lookup
-            if (mesh.userData._ifc_metadata) {
-              try {
-                const parsed = JSON.parse(mesh.userData._ifc_metadata as string);
-                mesh.userData = { ...mesh.userData, ...parsed };
-              } catch {
-                // keep original
-              }
-            }
-          }
-        });
-
-        scene.add(model);
-
-        // Auto-fit camera to the loaded model
-        const box = new THREE.Box3().setFromObject(model);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const fov = camera.fov * (Math.PI / 180);
-        let distance = maxDim / (2 * Math.tan(fov / 2));
-        distance *= 1.25;
-
-        camera.position.set(
-          center.x + distance,
-          center.y + distance * 0.5,
-          center.z + distance
-        );
-        camera.lookAt(center);
-        controls.target.copy(center);
-        controls.update();
-
-        setIsLoading(false);
-      },
-      undefined,
-      (error) => {
-        console.error("Error loading IFC-GLB:", error);
-        setIsLoading(false);
-      }
-    );
-
-    // --- Animation Loop ---
-    let frameId: number;
+    // --- Animation loop ---
     const animate = () => {
-      frameId = requestAnimationFrame(animate);
+      sceneRef.current.animFrameId = requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
     };
+    resizeRenderer();
+
+    // --- Resize handler ---
+    const resizeObserver = new ResizeObserver(() => {
+      resizeRenderer();
+    });
+    resizeObserver.observe(container);
+
+    const handleWindowResize = () => {
+      resizeRenderer();
+    };
+    window.addEventListener("resize", handleWindowResize);
+
+    // Store references
+    sceneRef.current = {
+      renderer,
+      scene,
+      camera,
+      controls,
+      clearHighlight,
+    };
     animate();
 
-    // --- Resize Handler ---
-    const handleResize = () => {
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-    };
-    window.addEventListener("resize", handleResize);
-
+    // --- Cleanup on unmount ---
     return () => {
-      cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", handleResize);
-      container.removeEventListener("pointerdown", onPointerDown);
-      // Remove the canvas from the DOM before disposing — critical in
-      // React StrictMode where effects are mounted/unmounted/remounted.
-      // Without this the old canvas stays hidden under the new one and
-      // the viewer appears blank.
+      loadRevisionRef.current.current += 1;
+      loadRevisionRef.current.original += 1;
+      if (sceneRef.current.animFrameId) {
+        cancelAnimationFrame(sceneRef.current.animFrameId);
+      }
+      window.removeEventListener("resize", handleWindowResize);
+      resizeObserver.disconnect();
+      renderer.domElement.removeEventListener("mousedown", onMouseDown);
+      renderer.domElement.removeEventListener("mouseup", onMouseUp);
+      clearHighlight();
+      disposeObject(sceneRef.current.modelRoot);
+      disposeObject(sceneRef.current.originalModelRoot);
+      groundGeo.dispose();
+      groundMat.dispose();
+      grid.dispose();
+      controls.dispose();
       renderer.domElement.remove();
       renderer.dispose();
-      controls.dispose();
+      // Reset ref so Fast Refresh can re-initialize properly
+      sceneRef.current = {};
     };
-  }, [modelUrl]);
+  }, []); // Empty dependency array - initialize only once
 
-  /* ─── Keys to skip/display separately ─── */
-  const CORE_KEYS = new Set(["GlobalId", "Name", "Type", "_ifc_metadata"]);
+  const loadModelToScene = useCallback(
+    (url: string, isOriginal: boolean) => {
+      const { scene, camera, controls } = sceneRef.current;
+      if (!scene || !camera || !controls) return;
+      const loadKey = isOriginal ? "original" : "current";
+      loadRevisionRef.current[loadKey] += 1;
+      const requestId = loadRevisionRef.current[loadKey];
 
-  const metaSections = selectedElement
-    ? Object.entries(selectedElement).filter(([k]) => !CORE_KEYS.has(k))
-    : [];
+      const existingModelRoot = isOriginal
+        ? sceneRef.current.originalModelRoot
+        : sceneRef.current.modelRoot;
+      if (existingModelRoot) {
+        if (!isOriginal) sceneRef.current.clearHighlight?.();
+        disposeObject(existingModelRoot);
+        scene.remove(existingModelRoot);
+        if (isOriginal) {
+          sceneRef.current.originalModelRoot = undefined;
+        } else {
+          sceneRef.current.modelRoot = undefined;
+          onElementSelectRef.current?.(null);
+        }
+      }
+
+      const loader = new GLTFLoader();
+      if (authToken) {
+        loader.setRequestHeader({ Authorization: `Bearer ${authToken}` });
+      }
+
+      loader.load(
+        url,
+        (gltf) => {
+          if (requestId !== loadRevisionRef.current[loadKey]) {
+            disposeObject(gltf.scene);
+            return;
+          }
+
+          const model = gltf.scene;
+          if (isOriginal) {
+            sceneRef.current.originalModelRoot = model;
+          } else {
+            sceneRef.current.modelRoot = model;
+          }
+
+          const bounds = new THREE.Box3().setFromObject(model);
+          const center = bounds.getCenter(new THREE.Vector3());
+          model.position.sub(center);
+          model.rotation.x = -Math.PI / 2;
+
+          const framedBounds = new THREE.Box3().setFromObject(model);
+          const framedCenter = framedBounds.getCenter(new THREE.Vector3());
+          const framedSize = framedBounds.getSize(new THREE.Vector3());
+
+          model.position.x -= framedCenter.x;
+          model.position.z -= framedCenter.z;
+          model.position.y -= framedBounds.min.y;
+
+          model.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              mesh.castShadow = false;
+              mesh.receiveShadow = false;
+              if (!mesh.geometry.getAttribute("normal")) {
+                mesh.geometry.computeVertexNormals();
+              }
+
+              const nextMaterial = Array.isArray(mesh.material)
+                ? mesh.material.map(cloneMaterial)
+                : cloneMaterial(mesh.material);
+
+              const materials = Array.isArray(nextMaterial) ? nextMaterial : [nextMaterial];
+              materials.forEach((material) => {
+                if (mesh.geometry.attributes.color) {
+                  material.vertexColors = true;
+                }
+                material.needsUpdate = true;
+              });
+
+              mesh.userData.originalMaterial = nextMaterial;
+              mesh.material = nextMaterial;
+            }
+          });
+
+          scene.add(model);
+
+          if (!isOriginal) {
+            const maxDim = Math.max(framedSize.x, framedSize.y, framedSize.z);
+            const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0.01 ? maxDim : 10;
+            const fov = camera.fov * (Math.PI / 180);
+            const distance = Math.max(
+              (safeMaxDim / (2 * Math.tan(fov / 2))) * 1.3,
+              12
+            );
+
+            if (!sceneRef.current.originalModelRoot) {
+              camera.position.set(distance * 0.7, distance * 0.5, distance * 0.7);
+              camera.lookAt(0, 0, 0);
+              controls.target.set(0, 0, 0);
+            }
+          }
+
+          const grid = scene.children.find(
+            (child) => child instanceof THREE.GridHelper
+          ) as THREE.GridHelper | undefined;
+          if (grid) {
+            grid.position.y = 0;
+          }
+
+          const ground = scene.children.find(
+            (child) =>
+              child instanceof THREE.Mesh && child.geometry instanceof THREE.PlaneGeometry
+          ) as THREE.Mesh | undefined;
+          if (ground) {
+            ground.position.y = -0.01;
+          }
+
+          controls.update();
+          applyDisplayMode(
+            displayMode,
+            sceneRef.current.modelRoot,
+            sceneRef.current.originalModelRoot
+          );
+        },
+        undefined,
+        (error) => {
+          if (requestId === loadRevisionRef.current[loadKey]) {
+            console.error(`Error loading GLB model (${url}):`, error);
+          }
+        }
+      );
+    },
+    [applyDisplayMode, authToken, displayMode]
+  );
+
+  // Load current model
+  useEffect(() => {
+    loadModelToScene(modelUrl, false);
+  }, [loadModelToScene, modelUrl]);
+
+  // Load original model
+  useEffect(() => {
+    if (originalModelUrl) {
+      loadModelToScene(originalModelUrl, true);
+    } else {
+      if (sceneRef.current.originalModelRoot && sceneRef.current.scene) {
+        sceneRef.current.scene.remove(sceneRef.current.originalModelRoot);
+        sceneRef.current.originalModelRoot = undefined;
+      }
+    }
+  }, [loadModelToScene, originalModelUrl]);
+
+  // Apply display mode
+  useEffect(() => {
+    applyDisplayMode(displayMode, sceneRef.current.modelRoot, sceneRef.current.originalModelRoot);
+  }, [applyDisplayMode, displayMode]);
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full min-h-[500px] overflow-hidden rounded-xl border bg-black/5"
-    >
-      {/* Theme Toggle Button */}
-      <button
-        onClick={() => setIsDarkMode(!isDarkMode)}
-        className="absolute bottom-4 left-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border bg-background/80 text-foreground shadow-md backdrop-blur-md transition-all hover:bg-background cursor-pointer"
-        title="Toggle Viewer Theme"
-      >
-        {isDarkMode ? <FiSun size={18} /> : <FiMoon size={18} />}
-      </button>
-
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-background/40 backdrop-blur-sm">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="mt-4 text-sm font-medium text-foreground">
-            Processing 3D Geometry...
-          </p>
-        </div>
-      )}
-
-      {/* ─── Inspection Sidebar ─── */}
-      {selectedElement && (
-        <div className="absolute right-4 top-4 z-10 w-80 max-h-[90%] overflow-y-auto rounded-xl border bg-background/90 p-4 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-right-4 duration-300">
-          {/* Header */}
-          <div className="mb-4 flex items-center justify-between border-b pb-2">
-            <h3 className="flex items-center gap-2 font-bold text-foreground">
-              <FiInfo className="text-primary" />
-              Element Inspector
-            </h3>
-            <button
-              onClick={() => setSelectedElement(null)}
-              className="rounded-md p-1 hover:bg-muted cursor-pointer"
-            >
-              <FiX />
-            </button>
-          </div>
-
-          <div className="space-y-3 text-xs">
-            {/* Core Identity */}
-            <section className="rounded-lg bg-primary/5 p-2.5">
-              <p className="font-semibold text-primary uppercase tracking-wider mb-1.5 text-[10px]">
-                Core Identity
-              </p>
-              <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-2 gap-y-1">
-                <span className="text-muted-foreground">Type</span>
-                <span className="font-medium text-foreground">
-                  {selectedElement.Type}
-                </span>
-                <span className="text-muted-foreground">Name</span>
-                <span className="font-medium text-foreground break-words">
-                  {selectedElement.Name || "—"}
-                </span>
-                <span className="text-muted-foreground">GUID</span>
-                <span className="flex items-center gap-1">
-                  <span
-                    className="font-mono text-foreground opacity-70 truncate"
-                    title={selectedElement.GlobalId}
-                  >
-                    {selectedElement.GlobalId}
-                  </span>
-                  <CopyButton text={selectedElement.GlobalId} />
-                </span>
-              </div>
-            </section>
-
-            {/* ─── Dynamic Metadata Sections ─── */}
-            {metaSections.map(([key, value]) => {
-              // Simple primitives
-              if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-                return (
-                  <section key={key} className="rounded-md bg-muted/30 p-2">
-                    <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-2 gap-y-0.5">
-                      <span className="text-muted-foreground font-semibold">{key}</span>
-                      <MetadataValue value={value} />
-                    </div>
-                  </section>
-                );
-              }
-
-              // Arrays (Materials, Classifications, etc.)
-              if (Array.isArray(value)) {
-                return (
-                  <CollapsibleSection key={key} title={key} accent>
-                    {value.every((v: any) => typeof v === "string" || typeof v === "number") ? (
-                      <p className="text-xs text-foreground">{value.join(", ")}</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {value.map((item: any, idx: number) => (
-                          <div key={idx} className="rounded bg-muted/30 p-1.5 text-xs">
-                            {typeof item === "object" && item !== null ? (
-                              <MetadataObject data={item} />
-                            ) : (
-                              <span className="text-foreground">{String(item)}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CollapsibleSection>
-                );
-              }
-
-              // Nested objects (Properties, Quantities, SpatialContainment, etc.)
-              if (typeof value === "object" && value !== null) {
-                return (
-                  <CollapsibleSection key={key} title={key} accent>
-                    {/* Property Sets / Quantity Sets have a second nesting level */}
-                    {Object.entries(value as Record<string, any>).map(
-                      ([subKey, subVal]) => {
-                        if (typeof subVal === "object" && subVal !== null && !Array.isArray(subVal)) {
-                          return (
-                            <div key={subKey} className="mb-2">
-                              <CollapsibleSection title={subKey} defaultOpen={false}>
-                                <MetadataObject data={subVal as Record<string, any>} />
-                              </CollapsibleSection>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div
-                            key={subKey}
-                            className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-2 gap-y-0.5 text-xs px-1"
-                          >
-                            <span className="text-muted-foreground truncate" title={subKey}>{subKey}</span>
-                            <MetadataValue value={subVal} />
-                          </div>
-                        );
-                      }
-                    )}
-                  </CollapsibleSection>
-                );
-              }
-
-              return null;
-            })}
-
-            {metaSections.length === 0 && (
-              <p className="text-center text-muted-foreground italic py-2">
-                No additional metadata available for this element.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Interaction Hint Overlay */}
-      {!selectedElement && !isLoading && (
-        <div className="pointer-events-none absolute bottom-4 right-4 flex items-center gap-2 text-[10px] font-medium text-muted-foreground uppercase tracking-widest bg-background/50 px-3 py-1.5 rounded-full border backdrop-blur-sm">
-          <FiInfo size={12} className="text-primary" />
-          Click element to inspect properties
-        </div>
-      )}
-    </div>
+      className="w-full h-full min-h-[500px] rounded-lg overflow-hidden"
+    />
   );
 }

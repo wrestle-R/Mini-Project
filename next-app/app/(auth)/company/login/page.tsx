@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCompany } from "@/contexts/CompanyContext";
 import {
   Card,
@@ -21,6 +21,11 @@ export default function CompanyLoginPage() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    document.body.classList.add("theme-company");
+    return () => document.body.classList.remove("theme-company");
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
@@ -39,7 +44,7 @@ export default function CompanyLoginPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 18 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
     >
@@ -56,7 +61,10 @@ export default function CompanyLoginPage() {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="email"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="company@email.com"
@@ -67,14 +75,16 @@ export default function CompanyLoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Sign In"}
+              {isSubmitting ? "Signing in…" : "Sign In"}
             </Button>
           </form>
         </CardContent>

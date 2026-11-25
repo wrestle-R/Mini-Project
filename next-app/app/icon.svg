@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="InfraSaathi icon">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#g)" />
+  <path d="M20 44V20h12c7.2 0 12 4.8 12 12s-4.8 12-12 12H20zm8-7h4c2.9 0 5-2.1 5-5s-2.1-5-5-5h-4v10z" fill="#fff" />
+</svg>

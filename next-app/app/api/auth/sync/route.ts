@@ -2,6 +2,37 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Worker from "@/lib/models/Worker";
 
+function isDbConnectivityError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const candidate = err as { code?: string; message?: string };
+  return (
+    candidate.code === "ETIMEOUT" ||
+    candidate.code === "ENOTFOUND" ||
+    candidate.code === "ECONNREFUSED" ||
+    /querySrv|timed out|server selection/i.test(candidate.message || "")
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      const error = new Error(`${label} timed out after ${ms}ms`);
+      (error as Error & { code?: string }).code = "ETIMEOUT";
+      reject(error);
+    }, ms);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
 // Simple Firebase token verification (decodes the JWT to get uid)
 async function verifyFirebaseToken(authHeader: string | null) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -40,10 +71,10 @@ export async function POST(req: Request) {
     const lastName = body.lastName || firebaseUser.name?.split(" ").slice(1).join(" ") || "";
     const phoneNumber = body.phoneNumber || "";
 
-    await dbConnect();
+    await withTimeout(dbConnect(), 9000, "MongoDB connect");
 
     // Upsert worker — always update names/phone so fresh signup data is never lost
-    const existingWorker = await Worker.findOne({ firebaseUid: firebaseUser.uid });
+    const existingWorker = await Worker.findOne({ firebaseUid: firebaseUser.uid }).maxTimeMS(5000);
     if (existingWorker) {
       // Update fields if we have new data
       if (firstName) existingWorker.firstName = firstName;
@@ -84,6 +115,14 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("[API/auth/sync] Error:", error);
+
+    if (isDbConnectivityError(error)) {
+      return NextResponse.json(
+        { error: "Database unavailable", code: "DB_UNAVAILABLE" },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

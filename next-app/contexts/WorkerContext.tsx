@@ -58,6 +58,16 @@ const WorkerContext = createContext<WorkerContextType>({
 
 const STORAGE_KEY = "buildsync_worker";
 
+function splitDisplayName(name?: string | null) {
+  const fullName = (name || "").trim();
+  if (!fullName) return { firstName: null as string | null, lastName: null as string | null };
+  const [first, ...rest] = fullName.split(" ");
+  return {
+    firstName: first || null,
+    lastName: rest.join(" ") || null,
+  };
+}
+
 export function WorkerProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<WorkerState>(defaultState);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -89,14 +99,23 @@ export function WorkerProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const idToken = await firebaseUser.getIdToken();
-      const res = await fetch("/api/auth/sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ role: "worker" }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+
+      let res: Response;
+      try {
+        res = await fetch("/api/auth/sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ role: "worker" }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!res.ok) {
         throw new Error(`Sync failed: ${res.statusText}`);
@@ -115,12 +134,24 @@ export function WorkerProvider({ children }: { children: React.ReactNode }) {
         role: "worker",
         isLoaded: true,
       });
-
-      toast.success("Welcome back!");
     } catch (err) {
       console.error("[WorkerContext] Sync error:", err);
-      toast.error("Authentication failed. Please try again.");
-      clearUser();
+
+      // Degraded mode: keep Firebase-authenticated user logged in even if
+      // backend profile sync fails temporarily (e.g., MongoDB DNS timeout).
+      const nameFromProfile = splitDisplayName(firebaseUser.displayName);
+      setUser((prev) => ({
+        firebaseUid: firebaseUser.uid,
+        mongoId: prev.mongoId,
+        firstName: prev.firstName ?? nameFromProfile.firstName,
+        lastName: prev.lastName ?? nameFromProfile.lastName,
+        email: prev.email ?? firebaseUser.email ?? null,
+        phone: prev.phone,
+        photoUrl: prev.photoUrl ?? firebaseUser.photoURL ?? null,
+        role: "worker",
+        isLoaded: true,
+      }));
+      toast.error("Profile sync is slow. Opened dashboard in limited mode.");
     }
   }, [firebaseUser]);
 
@@ -130,7 +161,19 @@ export function WorkerProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(fbUser);
       setAuthLoaded(true);
 
-      if (!fbUser) {
+      if (fbUser) {
+        const nameFromProfile = splitDisplayName(fbUser.displayName);
+        setUser((prev) => ({
+          ...prev,
+          firebaseUid: fbUser.uid,
+          firstName: prev.firstName ?? nameFromProfile.firstName,
+          lastName: prev.lastName ?? nameFromProfile.lastName,
+          email: prev.email ?? fbUser.email ?? null,
+          photoUrl: prev.photoUrl ?? fbUser.photoURL ?? null,
+          role: "worker",
+          isLoaded: true,
+        }));
+      } else {
         setUser({ ...defaultState, isLoaded: true });
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -154,7 +197,7 @@ export function WorkerProvider({ children }: { children: React.ReactNode }) {
     setUser({ ...defaultState, isLoaded: true });
     localStorage.removeItem(STORAGE_KEY);
     firebaseSignOut(auth).then(() => {
-      router.push("/");
+      router.push("/login");
     });
   }, [router]);
 

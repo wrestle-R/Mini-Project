@@ -47,7 +47,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">v1</p>
-            <CardDescription>BuildSync admin</CardDescription>
+            <CardDescription>InfraSaathi admin</CardDescription>
           </CardContent>
         </Card>
       </div>

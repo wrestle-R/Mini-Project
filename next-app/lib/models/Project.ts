@@ -5,7 +5,11 @@ export interface IProject extends Document {
   title: string;
   description: string;
   status: "planning" | "active" | "on-hold" | "completed" | "cancelled";
-  location: string;
+  location: {
+    displayName: string;
+    lat: number | null;
+    lng: number | null;
+  };
   startDate: Date | null;
   endDate: Date | null;
   budget: number;
@@ -36,8 +40,18 @@ const ProjectSchema = new Schema<IProject>(
       default: "planning",
     },
     location: {
-      type: String,
-      default: "",
+      displayName: {
+        type: String,
+        default: "",
+      },
+      lat: {
+        type: Number,
+        default: null,
+      },
+      lng: {
+        type: Number,
+        default: null,
+      },
     },
     startDate: {
       type: Date,

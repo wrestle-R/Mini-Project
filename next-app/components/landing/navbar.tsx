@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
+import { GoogleTranslateLanguageSelector } from '@/components/shared/google-translate'
 
 const NavItem = ({ item, onNavigate }: { item: { name: string; link: string; external?: boolean }; onNavigate: (id: string) => void }) => {
     return (
@@ -40,18 +41,22 @@ export function Navbar() {
     const { scrollY } = useScroll({ target: ref, offset: ['start start', 'end start'] })
     const [visible, setVisible] = useState(false)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    const [mounted, setMounted] = useState(false)
     const { resolvedTheme, setTheme } = useTheme()
 
     const navItems = [
         { name: 'Features', link: '#features' },
         { name: 'About', link: '#about' },
-        { name: 'Team', link: '#team' },
         { name: 'FAQ', link: '#faq' },
     ]
 
     useMotionValueEvent(scrollY, 'change', (latest) => {
         setVisible(latest > 50)
     })
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     const scrollToSection = (sectionId: string) => {
         const element = document.querySelector(sectionId)
@@ -62,6 +67,8 @@ export function Navbar() {
     const handleThemeToggle = () => {
         setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
     }
+
+    const isDark = mounted && resolvedTheme === 'dark'
 
     return (
         <motion.div
@@ -105,6 +112,8 @@ export function Navbar() {
                     </motion.nav>
 
                     <div className="flex items-center space-x-3">
+                        <GoogleTranslateLanguageSelector iconOnly />
+
                         <motion.button
                             onClick={handleThemeToggle}
                             whileHover={{ scale: 1.05 }}
@@ -113,7 +122,7 @@ export function Navbar() {
                             transition={{ type: 'spring', stiffness: 500, damping: 25 }}
                             className="p-2 rounded-full bg-muted text-foreground"
                             aria-label="Toggle theme">
-                            {resolvedTheme === 'dark' ? (
+                            {isDark ? (
                                 <svg
                                     className="w-5 h-5"
                                     fill="none"
@@ -190,7 +199,7 @@ export function Navbar() {
                         transition={{ type: 'spring', stiffness: 500, damping: 25 }}
                         className="p-1.5 rounded-full bg-muted text-foreground"
                         aria-label="Toggle theme">
-                        {resolvedTheme === 'dark' ? (
+                        {isDark ? (
                             <svg
                                 className="w-4 h-4"
                                 fill="none"
@@ -222,6 +231,8 @@ export function Navbar() {
                     <motion.button
                         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                         className="text-xl p-1 text-foreground"
+                        aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                        aria-expanded={mobileMenuOpen}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         transition={{ type: 'spring', stiffness: 500, damping: 25 }}>
@@ -266,6 +277,8 @@ export function Navbar() {
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                         className="md:hidden absolute top-full left-0 right-0 mt-2 mx-6">
                         <div className="backdrop-blur-xl rounded-2xl p-4 space-y-2 shadow-2xl bg-muted/50 border border-border">
+                            <GoogleTranslateLanguageSelector iconOnly />
+
                             {navItems.map((item, idx) => (
                                 <motion.a
                                     key={idx}

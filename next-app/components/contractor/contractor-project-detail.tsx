@@ -62,7 +62,7 @@ interface ProjectInfo {
   title: string;
   description: string;
   status: string;
-  location: string;
+  location: { displayName: string; lat: number | null; lng: number | null };
   startDate: string | null;
   endDate: string | null;
   budget: number;
@@ -116,7 +116,7 @@ interface WorkerFull {
       id: string;
       title: string;
       status: string;
-      location: string;
+      location: { displayName: string; lat: number | null; lng: number | null };
       startDate: string | null;
       endDate: string | null;
     } | null;
@@ -357,7 +357,8 @@ function WorkerProfilePanel({
                 <div className="flex gap-2 mt-0.5 text-muted-foreground">
                   {j.project?.location && (
                     <span className="flex items-center gap-0.5">
-                      <FiMapPin className="h-2.5 w-2.5" /> {j.project.location}
+                      <FiMapPin className="h-2.5 w-2.5" />
+                      {j.project.location.displayName || "Location pending"}
                     </span>
                   )}
                   <span className="flex items-center gap-0.5">
@@ -527,7 +528,8 @@ export function ContractorProjectDetail({
           <div className="flex flex-wrap gap-5 text-sm text-muted-foreground">
             {project.location && (
               <span className="flex items-center gap-1">
-                <FiMapPin className="h-3.5 w-3.5" /> {project.location}
+                <FiMapPin className="h-3.5 w-3.5" />
+                {project.location.displayName || "Location pending"}
               </span>
             )}
             {project.budget > 0 && (
@@ -642,6 +644,8 @@ export function ContractorProjectDetail({
                           <img
                             src={app.worker.photoUrl}
                             alt={workerName}
+                            width={40}
+                            height={40}
                             className="h-10 w-10 rounded-full object-cover border shrink-0"
                           />
                         ) : (

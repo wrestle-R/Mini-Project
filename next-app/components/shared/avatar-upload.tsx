@@ -118,6 +118,7 @@ export function AvatarUpload({
         type="button"
         variant="secondary"
         size="icon"
+        aria-label="Upload profile photo"
         className="absolute bottom-0 right-0 h-7 w-7 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={handleClick}
         disabled={uploading}

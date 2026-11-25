@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   FiBriefcase, FiMapPin, FiGlobe, FiFileText,
-  FiUsers, FiStar, FiEdit2, FiSave, FiX, FiPhone, FiMail, FiShield,
+  FiUsers, FiStar, FiEdit2, FiSave, FiX, FiPhone, FiMail, FiShield, FiSend,
 } from "react-icons/fi";
 
 /* ─── Types ─── */
@@ -138,6 +138,7 @@ export function CompanyProfile() {
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testingMail, setTestingMail] = useState(false);
   const [loadingExt, setLoadingExt] = useState(true);
   const [basic, setBasic] = useState({ name: user.name || "", phone: user.phone || "", sector: user.sector || "" });
   const [ext, setExt] = useState<IExtProfile>(defaultExt);
@@ -180,6 +181,26 @@ export function CompanyProfile() {
       setEditing(false);
     } catch { toast.error("Failed to save profile."); }
     finally { setSaving(false); }
+  };
+
+  const handleSendTestMail = async () => {
+    if (!token) return;
+    setTestingMail(true);
+    try {
+      const res = await fetch("/api/company/report-email/test", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to send test mail");
+      }
+      toast.success(`Test mail sent to ${data.recipient}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send test mail");
+    } finally {
+      setTestingMail(false);
+    }
   };
 
   return (
@@ -413,6 +434,30 @@ export function CompanyProfile() {
                       <ProfileField icon={FiGlobe} label="Twitter" value={ext.socialLinks.twitter} />
                     </div>
                   )}
+                </CardSection>
+              </motion.div>
+
+              {/* Report Mail */}
+              <motion.div variants={itemV}>
+                <CardSection icon={FiMail} title="Report Mail" description="Verify weekly report email delivery" accent="cyan">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium">SMTP test email</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Sends a report mail test using the server SMTP configuration.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSendTestMail}
+                      disabled={testingMail}
+                      className="gap-1.5 text-xs"
+                    >
+                      <FiSend className="h-3.5 w-3.5" />
+                      {testingMail ? "Sending test..." : "Send test mail"}
+                    </Button>
+                  </div>
                 </CardSection>
               </motion.div>
 

@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useContractor } from "@/contexts/ContractorContext";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 
 import {
   Sidebar,
@@ -32,9 +30,11 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { Building2, Sun, Moon, ChevronUp, LogOut, User } from "lucide-react";
+import { Building2, ChevronUp, LogOut, User } from "lucide-react";
+import { GoogleTranslateLanguageSelector } from "@/components/shared/google-translate";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 
-import { FiHome, FiFolder } from "react-icons/fi";
+import { FiHome, FiFolder, FiBox, FiFileText, FiPackage } from "react-icons/fi";
 
 /* ─────────────────── Component ─────────────────── */
 
@@ -45,12 +45,8 @@ export function ContractorSidebar() {
   const { firstName, lastName, email, photoUrl } = user;
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ") || "My Profile";
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
 
   const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/");
-  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
   return (
     <Sidebar collapsible="icon" variant="sidebar">
@@ -58,11 +54,11 @@ export function ContractorSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="BuildSync">
+            <SidebarMenuButton size="lg" asChild tooltip="InfraSaathi">
               <Link href="/contractor/dashboard">
                 <Building2 className="h-6 w-6 text-primary shrink-0" />
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">BuildSync</span>
+                  <span className="font-semibold">InfraSaathi</span>
                   <span className="text-xs text-muted-foreground">
                     Contractor
                   </span>
@@ -110,6 +106,54 @@ export function ContractorSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/contractor/ifc-viewer")}
+                  tooltip="IFC Studio"
+                  className={cn(
+                    isActive("/contractor/ifc-viewer") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/contractor/ifc-viewer">
+                    <FiBox className="h-4 w-4 shrink-0" />
+                    <span>IFC Studio</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/contractor/materials")}
+                  tooltip="Materials"
+                  className={cn(
+                    isActive("/contractor/materials") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/contractor/materials">
+                    <FiPackage className="h-4 w-4 shrink-0" />
+                    <span>Materials</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive("/contractor/daily-reports")}
+                  tooltip="Daily Reports"
+                  className={cn(
+                    isActive("/contractor/daily-reports") &&
+                      "bg-primary/10 text-primary font-medium"
+                  )}
+                >
+                  <Link href="/contractor/daily-reports">
+                    <FiFileText className="h-4 w-4 shrink-0" />
+                    <span>Daily Reports</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -117,6 +161,13 @@ export function ContractorSidebar() {
 
       {/* ── Footer ── */}
       <SidebarFooter>
+        <div className="space-y-2 px-2 pb-2">
+          <ThemeToggle fullWidth={state === "expanded"} />
+          <GoogleTranslateLanguageSelector
+            variant="sidebar"
+            compact={state === "collapsed"}
+          />
+        </div>
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -155,15 +206,6 @@ export function ContractorSidebar() {
                     <span>My Profile</span>
                   </Link>
                 </DropdownMenuItem>
-                {mounted && (
-                  <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer py-2 px-3">
-                    {resolvedTheme === "dark"
-                      ? <Sun className="mr-2 h-4 w-4 text-muted-foreground" />
-                      : <Moon className="mr-2 h-4 w-4 text-muted-foreground" />
-                    }
-                    <span>Change Look ({resolvedTheme === "dark" ? "Light" : "Dark"})</span>
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuSeparator className="my-1" />
                 <DropdownMenuItem
                   onClick={logout}

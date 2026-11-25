@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { motion } from "framer-motion";
 import {
@@ -54,7 +54,7 @@ export default function CompanyAssignmentsPage() {
     notes: "",
   });
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     if (!token) return;
     try {
       const [aRes, pRes, cRes, cuRes] = await Promise.all([
@@ -111,11 +111,11 @@ export default function CompanyAssignmentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchAll();
-  }, [token]);
+  }, [fetchAll]);
 
   const handleCreate = async () => {
     if (!token || !form.projectId || !form.contractorId) {
@@ -182,6 +182,7 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="projectId">Project *</Label>
                 <select
                   id="projectId"
+                  name="projectId"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.projectId}
                   onChange={(e) =>
@@ -200,6 +201,7 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="contractorId">Contractor *</Label>
                 <select
                   id="contractorId"
+                  name="contractorId"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.contractorId}
                   onChange={(e) =>
@@ -218,6 +220,7 @@ export default function CompanyAssignmentsPage() {
                 <Label htmlFor="customerId">Customer (optional)</Label>
                 <select
                   id="customerId"
+                  name="customerId"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.customerId}
                   onChange={(e) =>

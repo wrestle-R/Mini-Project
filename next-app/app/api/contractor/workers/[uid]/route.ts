@@ -4,6 +4,7 @@ import { verifyCustomToken } from "@/lib/auth";
 import Worker from "@/lib/models/Worker";
 import WorkerProfile from "@/lib/models/WorkerProfile";
 import ProjectApplication from "@/lib/models/ProjectApplication";
+import { normalizeProjectLocation } from "@/lib/project-location";
 // Ensure Project schema is registered for population
 import "@/lib/models/Project";
 
@@ -82,7 +83,7 @@ export async function GET(
           _id: { toString(): string };
           title: string;
           status: string;
-          location: string;
+          location: unknown;
           startDate: Date;
           endDate: Date;
         } | null;
@@ -93,7 +94,7 @@ export async function GET(
                 id: proj._id.toString(),
                 title: proj.title,
                 status: proj.status,
-                location: proj.location,
+                location: normalizeProjectLocation(proj.location),
                 startDate: proj.startDate,
                 endDate: proj.endDate,
               }

@@ -4,6 +4,7 @@ import { verifyCustomToken } from "@/lib/auth";
 import ProjectContractorAssignment from "@/lib/models/ProjectContractorAssignment";
 import ProjectApplication from "@/lib/models/ProjectApplication";
 import Worker from "@/lib/models/Worker";
+import { normalizeProjectLocation } from "@/lib/project-location";
 // Ensure schemas are registered
 import "@/lib/models/Project";
 
@@ -70,20 +71,24 @@ export async function GET(req: Request) {
     // Build a helpful map: projectId -> project info
     const projectMap: Record<
       string,
-      { title: string; status: string; location: string }
+      {
+        title: string;
+        status: string;
+        location: ReturnType<typeof normalizeProjectLocation>;
+      }
     > = {};
     for (const a of assignments) {
       const proj = a.projectId as unknown as {
         _id: { toString(): string };
         title: string;
         status: string;
-        location: string;
+        location: unknown;
       };
       if (proj && proj._id) {
         projectMap[proj._id.toString()] = {
           title: proj.title,
           status: proj.status,
-          location: proj.location,
+          location: normalizeProjectLocation(proj.location),
         };
       }
     }

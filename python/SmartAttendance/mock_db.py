@@ -5,6 +5,7 @@ def get_employee_details(employee_id):
     Args:
         employee_id (str): The ID of the employee to look up.
         
+        
     Returns:
         dict: A dictionary containing employee details.
     """

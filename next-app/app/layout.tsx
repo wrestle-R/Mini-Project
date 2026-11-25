@@ -8,6 +8,7 @@ import { ContractorProvider } from "@/contexts/ContractorContext";
 import { CompanyProvider } from "@/contexts/CompanyContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { GoogleTranslateProvider } from "@/components/shared/google-translate";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -15,9 +16,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "BuildSync - Construction Field Management",
+  title: "InfraSaathi - Construction Field Management",
   description:
-    "Digitize your o0construction site operations with BuildSync. Manage projects, tasks, DPRs, attendance, materials, and invoicing in one platform.",
+    "Digitize your construction site operations with InfraSaathi. Manage projects, tasks, DPRs, attendance, materials, and invoicing in one platform.",
 };
 
 export default function RootLayout({
@@ -27,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
-      <body className="antialiased">
+      <body className="antialiased" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -40,6 +41,7 @@ export default function RootLayout({
                 <TooltipProvider>
                   {children}
                 </TooltipProvider>
+                <GoogleTranslateProvider />
               </CompanyProvider>
             </ContractorProvider>
           </WorkerProvider>

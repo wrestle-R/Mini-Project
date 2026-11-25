@@ -14,7 +14,7 @@ export default function AuthLayout({
           className="flex items-center gap-2 self-center font-semibold text-foreground"
         >
           <Building2 className="h-6 w-6 text-primary" />
-          BuildSync
+          InfraSaathi
         </Link>
         {children}
       </div>
