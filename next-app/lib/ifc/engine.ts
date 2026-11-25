@@ -451,19 +451,19 @@ export async function createModelFromIfcBuffer(
   }
 }
 
+function elementMetadata(element: IfcElementRecord) {
+  return {
+    globalId: element.id,
+    type: element.type,
+    name: element.name,
+    description: "",
+    objectType: element.type,
+    properties: element.properties || {},
+  };
+}
+
 export function createMetadataFromModel(model: IfcModelRecord) {
-  const metadata: Record<string, unknown> = {};
-  for (const elem of model.elements) {
-    metadata[elem.id] = {
-      globalId: elem.id,
-      type: elem.type,
-      name: elem.name,
-      description: "",
-      objectType: elem.type,
-      properties: elem.properties || {},
-    };
-  }
-  return metadata;
+  return Object.fromEntries(model.elements.map((element) => [element.id, elementMetadata(element)]));
 }
 
 function getElementColor(element: IfcElementRecord): Rgba {
@@ -506,7 +506,9 @@ export async function generateGlbFromModel(model: IfcModelRecord) {
       .setMaterial(material);
 
     const mesh = doc.createMesh(element.id).addPrimitive(primitive);
-    const node = doc.createNode(element.id).setMesh(mesh);
+    const node = doc.createNode(element.id).setMesh(mesh).setExtras({
+      ifcMetadata: elementMetadata(element),
+    });
     scene.addChild(node);
   }
 

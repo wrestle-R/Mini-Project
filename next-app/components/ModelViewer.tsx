@@ -44,6 +44,7 @@ export default function ModelViewer({
     camera?: THREE.PerspectiveCamera;
     controls?: OrbitControls;
     animFrameId?: number;
+    clearHighlight?: () => void;
     modelRoot?: THREE.Object3D;
     originalModelRoot?: THREE.Object3D;
   }>({});
@@ -118,15 +119,24 @@ export default function ModelViewer({
 
   // Fetch metadata when URL changes
   useEffect(() => {
+    metadataRef.current = {};
     if (!metadataUrl) return;
+    const controller = new AbortController();
     fetch(metadataUrl, {
       headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      signal: controller.signal,
     })
-      .then((res) => res.json())
-      .then((data) => {
-        metadataRef.current = data;
+      .then((res) => {
+        if (!res.ok) throw new Error(`Metadata request failed (${res.status})`);
+        return res.json();
       })
-      .catch((err) => console.error("Failed to load metadata:", err));
+      .then((data) => {
+        if (!controller.signal.aborted) metadataRef.current = data;
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) console.error("Failed to load metadata:", err);
+      });
+    return () => controller.abort();
   }, [metadataUrl, authToken]);
 
   // Initialize scene (only once)
@@ -223,6 +233,8 @@ export default function ModelViewer({
 
     const clearHighlight = () => {
       originalMaterials.forEach((mat, mesh) => {
+        const highlights = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        highlights.forEach((highlight) => highlight.dispose());
         mesh.material = mat;
       });
       originalMaterials.clear();
@@ -234,12 +246,15 @@ export default function ModelViewer({
         if ((child as THREE.Mesh).isMesh) {
           const mesh = child as THREE.Mesh;
           originalMaterials.set(mesh, mesh.material);
-          const cloned = (
-            mesh.material as THREE.MeshStandardMaterial
-          ).clone();
-          cloned.emissive = new THREE.Color(0x2266cc);
-          cloned.emissiveIntensity = 0.45;
-          mesh.material = cloned;
+          const highlight = (material: THREE.Material) => {
+            const cloned = material.clone() as THREE.MeshStandardMaterial;
+            cloned.emissive = new THREE.Color(0x2266cc);
+            cloned.emissiveIntensity = 0.45;
+            return cloned;
+          };
+          mesh.material = Array.isArray(mesh.material)
+            ? mesh.material.map(highlight)
+            : highlight(mesh.material);
         }
       });
     };
@@ -268,23 +283,19 @@ export default function ModelViewer({
       if (intersects.length > 0) {
         let obj: THREE.Object3D | null = intersects[0].object;
         while (obj && obj !== sceneRef.current.modelRoot) {
-          if (obj.name && metadataRef.current[obj.name]) {
-            break;
+          const metadata =
+            metadataRef.current[obj.name] ??
+            (obj.userData.ifcMetadata as ElementMetadata | undefined);
+          if (metadata?.globalId) {
+            highlightNode(obj);
+            onElementSelectRef.current?.(metadata);
+            return;
           }
           obj = obj.parent;
         }
-
-        if (obj && obj.name && metadataRef.current[obj.name]) {
-          highlightNode(obj);
-          onElementSelectRef.current?.(metadataRef.current[obj.name]);
-        } else {
-          clearHighlight();
-          onElementSelectRef.current?.(null);
-        }
-      } else {
-        clearHighlight();
-        onElementSelectRef.current?.(null);
       }
+      clearHighlight();
+      onElementSelectRef.current?.(null);
     };
 
     renderer.domElement.addEventListener("mousedown", onMouseDown);
@@ -296,8 +307,6 @@ export default function ModelViewer({
       controls.update();
       renderer.render(scene, camera);
     };
-    animate();
-
     resizeRenderer();
 
     // --- Resize handler ---
@@ -317,11 +326,14 @@ export default function ModelViewer({
       scene,
       camera,
       controls,
-      animFrameId: 0,
+      clearHighlight,
     };
+    animate();
 
     // --- Cleanup on unmount ---
     return () => {
+      loadRevisionRef.current.current += 1;
+      loadRevisionRef.current.original += 1;
       if (sceneRef.current.animFrameId) {
         cancelAnimationFrame(sceneRef.current.animFrameId);
       }
@@ -329,11 +341,15 @@ export default function ModelViewer({
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener("mousedown", onMouseDown);
       renderer.domElement.removeEventListener("mouseup", onMouseUp);
+      clearHighlight();
+      disposeObject(sceneRef.current.modelRoot);
+      disposeObject(sceneRef.current.originalModelRoot);
+      groundGeo.dispose();
+      groundMat.dispose();
+      grid.dispose();
       controls.dispose();
+      renderer.domElement.remove();
       renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
-      }
       // Reset ref so Fast Refresh can re-initialize properly
       sceneRef.current = {};
     };
@@ -351,6 +367,7 @@ export default function ModelViewer({
         ? sceneRef.current.originalModelRoot
         : sceneRef.current.modelRoot;
       if (existingModelRoot) {
+        if (!isOriginal) sceneRef.current.clearHighlight?.();
         disposeObject(existingModelRoot);
         scene.remove(existingModelRoot);
         if (isOriginal) {
@@ -399,6 +416,9 @@ export default function ModelViewer({
               const mesh = child as THREE.Mesh;
               mesh.castShadow = false;
               mesh.receiveShadow = false;
+              if (!mesh.geometry.getAttribute("normal")) {
+                mesh.geometry.computeVertexNormals();
+              }
 
               const nextMaterial = Array.isArray(mesh.material)
                 ? mesh.material.map(cloneMaterial)

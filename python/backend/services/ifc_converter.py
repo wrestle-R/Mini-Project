@@ -85,18 +85,18 @@ def _get_face_colors(shape):
             mat = materials[mat_id]
             try:
                 diffuse = mat.diffuse
-                if diffuse and len(diffuse) >= 3:
-                    r = max(0, min(255, int(diffuse[0] * 255)))
-                    g = max(0, min(255, int(diffuse[1] * 255)))
-                    b = max(0, min(255, int(diffuse[2] * 255)))
-                    a = 255
-                    try:
-                        if mat.transparency and mat.transparency > 0:
-                            a = max(0, min(255, int((1.0 - mat.transparency) * 255)))
-                    except (AttributeError, TypeError):
-                        pass
-                    face_colors[face_idx] = [r, g, b, a]
-            except (AttributeError, TypeError, IndexError):
+                if diffuse is None:
+                    continue
+                if hasattr(diffuse, "r"):
+                    channels = (diffuse.r, diffuse.g, diffuse.b)
+                    rgb = tuple(value() if callable(value) else value for value in channels)
+                else:
+                    rgb = (diffuse[0], diffuse[1], diffuse[2])
+                transparency = getattr(mat, "transparency", 0) or 0
+                face_colors[face_idx] = np.clip(
+                    np.array([*rgb, 1.0 - transparency]) * 255, 0, 255
+                )
+            except (AttributeError, TypeError, IndexError, ValueError):
                 continue
 
         return face_colors
@@ -159,19 +159,25 @@ def convert_ifc_to_glb(input_path: str, output_path: str) -> str:
             if face_colors is not None:
                 mesh.visual.face_colors = face_colors
 
-            scene.add_geometry(mesh, node_name=guid, geom_name=guid)
+            try:
+                element = ifc_file.by_guid(guid)
+                element_metadata = _extract_element_metadata(ifc_file, element)
+            except Exception:
+                element_metadata = None
+
+            scene.add_geometry(
+                mesh,
+                node_name=guid,
+                geom_name=guid,
+                metadata={"ifcMetadata": element_metadata} if element_metadata else None,
+            )
+            if element_metadata:
+                metadata[guid] = element_metadata
 
         except Exception:
             if not iterator.next():
                 break
             continue
-
-        # Extract element metadata for the inspection panel
-        try:
-            element = ifc_file.by_guid(guid)
-            metadata[guid] = _extract_element_metadata(ifc_file, element)
-        except Exception:
-            pass
 
         if not iterator.next():
             break
